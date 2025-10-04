@@ -192,7 +192,7 @@ export default function Hero() {
                   <span className="font-semibold">{slides[currentSlide].title}</span> {slides[currentSlide].subtitle}
                 </span>
               </div>
-              <div className="flex items-center space-x-6 mt-3">
+              <div className="md:flex items-center space-x-6 mt-3">
                 <span className="text-2xl font-bold text-primary">{slides[currentSlide].price}</span>
                 <div className="flex space-x-3">
                   {slides[currentSlide].features.map((feature, index) => (

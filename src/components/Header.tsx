@@ -3,21 +3,31 @@
 import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
-import { ThemeToggle } from '@/components/theme-provider'
+import { useTheme } from '@/components/theme-provider'
 import { 
-  Search, 
   Menu, 
   User, 
   Heart, 
   Bell, 
   Building2,
   LogIn,
-  UserPlus
+  UserPlus,
+  X,
+  Home,
+  Search,
+  Sun,
+  Moon
 } from 'lucide-react'
 
 export default function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [scrolled, setScrolled] = useState(false)
+  const { theme, setTheme } = useTheme()
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   useEffect(() => {
     const handleScroll = () => {
@@ -28,54 +38,108 @@ export default function Header() {
     return () => window.removeEventListener('scroll', handleScroll)
   }, [])
 
+  useEffect(() => {
+    if (scrolled && isMenuOpen) {
+      setIsMenuOpen(false)
+    }
+  }, [scrolled])
+
+  const toggleTheme = () => {
+    setTheme(theme === 'light' ? 'dark' : 'light')
+  }
+
   return (
-    <header className={`fixed top-0 left-0 right-0 z-50 transition-all duration-500 
-        ${scrolled
-            ? "bg-background/95 backdrop-blur-md border-b border-border/50 shadow-sm" 
-            : "bg-transparent"}
-      `}>
+    <header className={`fixed top-0 left-0 right-0 z-50 transition-all duration-500 ${
+        scrolled
+          ? "bg-background/95 backdrop-blur-md border-b border-border/50 shadow-sm" 
+          : "bg-transparent"
+      }`}>
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex h-16 items-center justify-between">
           {/* Logo */}
-          <div className="flex items-center space-x-4">
-            <Link href="/" className="flex items-center space-x-2">
-              <div className="tyrent-gradient dark:tyrent-gradient-dark w-8 h-8 rounded-lg flex items-center justify-center">
-                <Building2 className="h-5 w-5 text-white" />
-              </div>
-              <span className={`text-xl font-bold transition-colors duration-300 ${
-                scrolled ? 'text-foreground' : 'text-white font-semibold'
-              }`}>
-                Tyrent
-              </span>
-            </Link>
-          </div>
+          <Link href="/" className="flex items-center space-x-2 z-50">
+            <div className="tyrent-gradient w-8 h-8 rounded-lg flex items-center justify-center shadow-lg">
+              <Building2 className="h-5 w-5 text-white" />
+            </div>
+            <span className={`text-xl font-bold transition-colors duration-300 font-montserrat ${
+              scrolled ? 'text-foreground' : 'text-white drop-shadow-lg'
+            }`}>
+              Tyrent
+            </span>
+          </Link>
 
-          {/* Right Side Navigation */}
-          <div className="flex items-center space-x-4">
-            {/* Become a Host */}
-            <Link href="/host" className="hidden lg:block">
+          {/* Desktop Navigation */}
+          <nav className="hidden md:flex items-center space-x-1">
+            <Link href="/">
               <Button 
                 variant="ghost" 
-                className={`text-sm font-medium rounded-full px-4 py-2 transition-colors duration-300 ${
+                className={`text-sm font-medium rounded-full px-4 transition-colors duration-300 font-nunito ${
                   scrolled 
                     ? 'text-foreground hover:bg-accent' 
-                    : 'text-white font-semibold hover:bg-white/10'
+                    : 'text-white hover:bg-white/10'
                 }`}
               >
-                Become a landlord
+                Home
               </Button>
             </Link>
+            <Link href="/properties">
+              <Button 
+                variant="ghost" 
+                className={`text-sm font-medium rounded-full px-4 transition-colors duration-300 font-nunito ${
+                  scrolled 
+                    ? 'text-foreground hover:bg-accent' 
+                    : 'text-white hover:bg-white/10'
+                }`}
+              >
+                Properties
+              </Button>
+            </Link>
+            <Link href="/host">
+              <Button 
+                variant="ghost" 
+                className={`text-sm font-medium rounded-full px-4 transition-colors duration-300 font-nunito ${
+                  scrolled 
+                    ? 'text-foreground hover:bg-accent' 
+                    : 'text-white hover:bg-white/10'
+                }`}
+              >
+                Become a Landlord
+              </Button>
+            </Link>
+          </nav>
 
+          {/* Right Side Navigation */}
+          <div className="hidden md:flex items-center space-x-2">
             {/* Theme Toggle */}
-            <div className={scrolled ? '' : 'text-white'}>
-              <ThemeToggle />
-            </div>
+            {mounted && (
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                onClick={toggleTheme}
+                className={`rounded-full transition-colors duration-300 ${
+                  scrolled 
+                    ? 'hover:bg-accent' 
+                    : 'hover:bg-white/10'
+                }`}
+                title={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
+              >
+                {theme === 'light' ? (
+                  <Moon className={`h-5 w-5 transition-colors duration-300 ${
+                    scrolled ? 'text-muted-foreground' : 'text-white'
+                  }`} />
+                ) : (
+                  <Sun className={`h-5 w-5 transition-colors duration-300 ${
+                    scrolled ? 'text-muted-foreground' : 'text-white'
+                  }`} />
+                )}
+              </Button>
+            )}
 
             {/* Notifications */}
             <Button 
               variant="ghost" 
               size="icon" 
-              className={`hidden sm:flex rounded-full transition-colors duration-300 ${
+              className={`rounded-full transition-colors duration-300 ${
                 scrolled 
                   ? 'hover:bg-accent' 
                   : 'hover:bg-white/10'
@@ -90,7 +154,7 @@ export default function Header() {
             <Button 
               variant="ghost" 
               size="icon" 
-              className={`hidden sm:flex rounded-full transition-colors duration-300 ${
+              className={`rounded-full transition-colors duration-300 ${
                 scrolled 
                   ? 'hover:bg-accent' 
                   : 'hover:bg-white/10'
@@ -104,13 +168,13 @@ export default function Header() {
             {/* User Menu */}
             <div className={`flex items-center space-x-2 rounded-full p-1 hover:shadow-md transition-all duration-300 cursor-pointer ${
               scrolled 
-                ? 'border border-border' 
-                : 'border border-white/30 bg-white/10'
+                ? 'border border-border bg-background' 
+                : 'border border-white/30 bg-white/10 backdrop-blur-sm'
             }`}>
               <Button 
                 variant="ghost" 
                 size="icon" 
-                className="rounded-full"
+                className="rounded-full h-8 w-8"
               >
                 <Menu className={`h-4 w-4 transition-colors duration-300 ${
                   scrolled ? 'text-muted-foreground' : 'text-white'
@@ -119,9 +183,9 @@ export default function Header() {
               <Button 
                 variant="ghost" 
                 size="icon" 
-                className="rounded-full"
+                className="rounded-full h-8 w-8"
               >
-                <User className={`h-5 w-5 transition-colors duration-300 ${
+                <User className={`h-4 w-4 transition-colors duration-300 ${
                   scrolled ? 'text-muted-foreground' : 'text-white'
                 }`} />
               </Button>
@@ -129,42 +193,125 @@ export default function Header() {
           </div>
 
           {/* Mobile Menu Button */}
-          <div className="md:hidden">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setIsMenuOpen(!isMenuOpen)}
-              className={scrolled ? '' : 'text-white hover:bg-white/10'}
-            >
-              <Menu className="h-5 w-5" />
-            </Button>
-          </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setIsMenuOpen(!isMenuOpen)}
+            className={`md:hidden rounded-full z-50 ${
+              scrolled ? 'hover:bg-accent' : 'text-white hover:bg-white/10'
+            }`}
+          >
+            {isMenuOpen ? (
+              <X className="h-6 w-6" />
+            ) : (
+              <Menu className="h-6 w-6" />
+            )}
+          </Button>
         </div>
+      </div>
 
-        {/* Mobile Menu */}
-        {isMenuOpen && (
-          <div className="md:hidden border-t border-border bg-background/95 backdrop-blur-md py-4 space-y-2">
-            <Link href="/listings" className="block px-4 py-2 text-sm text-foreground hover:bg-accent rounded">
-              Browse Listings
-            </Link>
-            <Link href="/host" className="block px-4 py-2 text-sm text-foreground hover:bg-accent rounded">
-              Become a Landlord
-            </Link>
-            <div className="px-4 py-2 border-t border-border">
-              <div className="flex space-x-2">
-                <Button size="sm" variant="outline" className="flex-1">
+      {/* Modern Mobile Menu */}
+      {isMenuOpen && (
+        <>
+          {/* Backdrop */}
+          <div 
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 md:hidden"
+            onClick={() => setIsMenuOpen(false)}
+          />
+          
+          {/* Menu Panel */}
+          <div className="fixed top-16 left-0 right-0 bottom-0 bg-background z-40 md:hidden overflow-y-auto">
+            <div className="container mx-auto px-4 py-6">
+              {/* Navigation Links */}
+              <div className="space-y-1 mb-8">
+                <Link 
+                  href="/" 
+                  onClick={() => setIsMenuOpen(false)}
+                  className="flex items-center space-x-3 px-4 py-3 rounded-lg hover:bg-accent transition-colors group"
+                >
+                  <Home className="h-5 w-5 text-muted-foreground group-hover:text-foreground" />
+                  <span className="text-base font-medium text-foreground font-nunito">Home</span>
+                </Link>
+                <Link 
+                  href="/properties" 
+                  onClick={() => setIsMenuOpen(false)}
+                  className="flex items-center space-x-3 px-4 py-3 rounded-lg hover:bg-accent transition-colors group"
+                >
+                  <Search className="h-5 w-5 text-muted-foreground group-hover:text-foreground" />
+                  <span className="text-base font-medium text-foreground font-nunito">Browse Properties</span>
+                </Link>
+                <Link 
+                  href="/host" 
+                  onClick={() => setIsMenuOpen(false)}
+                  className="flex items-center space-x-3 px-4 py-3 rounded-lg hover:bg-accent transition-colors group"
+                >
+                  <Building2 className="h-5 w-5 text-muted-foreground group-hover:text-foreground" />
+                  <span className="text-base font-medium text-foreground font-nunito">Become a Landlord</span>
+                </Link>
+              </div>
+
+              {/* Quick Actions */}
+              <div className="space-y-3 mb-8">
+                <div className="flex items-center justify-between px-4 py-2">
+                  <span className="text-sm font-semibold text-muted-foreground font-montserrat">Quick Actions</span>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <button className="flex flex-col items-center justify-center p-4 rounded-xl border border-border hover:bg-accent transition-colors">
+                    <Heart className="h-6 w-6 text-muted-foreground mb-2" />
+                    <span className="text-xs font-medium font-nunito">Favorites</span>
+                  </button>
+                  <button className="flex flex-col items-center justify-center p-4 rounded-xl border border-border hover:bg-accent transition-colors">
+                    <Bell className="h-6 w-6 text-muted-foreground mb-2" />
+                    <span className="text-xs font-medium font-nunito">Notifications</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Auth Buttons */}
+              <div className="space-y-3 px-4">
+                <Button 
+                  size="lg" 
+                  variant="outline" 
+                  className="w-full justify-center font-nunito"
+                  onClick={() => setIsMenuOpen(false)}
+                >
                   <LogIn className="h-4 w-4 mr-2" />
                   Sign In
                 </Button>
-                <Button size="sm" className="flex-1 tyrent-gradient dark:tyrent-gradient-dark">
+                <Button 
+                  size="lg" 
+                  className="w-full justify-center tyrent-gradient text-white font-nunito"
+                  onClick={() => setIsMenuOpen(false)}
+                >
                   <UserPlus className="h-4 w-4 mr-2" />
                   Sign Up
                 </Button>
               </div>
+
+              {/* Theme Toggle */}
+              {mounted && (
+                <div className="flex items-center justify-between px-4 py-4 mt-6 border-t border-border">
+                  <span className="text-sm font-medium text-foreground font-nunito">
+                    {theme === 'light' ? 'Light Mode' : 'Dark Mode'}
+                  </span>
+                  <Button 
+                    variant="outline" 
+                    size="icon"
+                    onClick={toggleTheme}
+                    className="rounded-full"
+                  >
+                    {theme === 'light' ? (
+                      <Moon className="h-5 w-5" />
+                    ) : (
+                      <Sun className="h-5 w-5" />
+                    )}
+                  </Button>
+                </div>
+              )}
             </div>
           </div>
-        )}
-      </div>
+        </>
+      )}
     </header>
   )
 }

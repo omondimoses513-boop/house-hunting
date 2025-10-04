@@ -44,6 +44,13 @@ export default function TrustSafety() {
     },
   ]
 
+  const testimonialImages = [
+    'https://images.unsplash.com/photo-1531123897727-8f129e1688ce?w=100&h=100&fit=crop&crop=faces',
+    'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop&crop=faces',
+    'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=100&h=100&fit=crop&crop=faces',
+    'https://images.unsplash.com/photo-1494790108755-2616b612b647?w=100&h=100&fit=crop&crop=faces'
+  ]
+
   return (
     <section className="py-12 bg-card">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
@@ -96,7 +103,7 @@ export default function TrustSafety() {
           <motion.div 
             className="bg-primary rounded-2xl p-8 text-white"
             variants={itemVariants}
-            whileHover={{ scale: 1.02, rotateY: 5 }}
+            whileHover={{ scale: 1.02 }}
             transition={{ duration: 0.3 }}
           >
             <div className="flex items-center justify-between mb-6">
@@ -118,12 +125,12 @@ export default function TrustSafety() {
             </p>
             <div className="flex items-center space-x-4">
               <div className="flex -space-x-2">
-                {[1, 2, 3, 4].map((i) => (
+                {testimonialImages.map((imgSrc, i) => (
                   <motion.img
                     key={i}
-                    src={`https://images.unsplash.com/photo-${1500648767791 + i}-c3fb12e2f952?w=40&h=40&fit=crop&crop=face`}
-                    alt="Happy tenant"
-                    className="w-8 h-8 rounded-full border-2 border-white"
+                    src={imgSrc}
+                    alt={`Happy tenant ${i + 1}`}
+                    className="w-10 h-10 rounded-full border-2 border-white object-cover"
                     whileHover={{ scale: 1.2, zIndex: 10 }}
                     transition={{ duration: 0.2 }}
                   />

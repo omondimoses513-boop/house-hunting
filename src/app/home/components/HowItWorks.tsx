@@ -35,22 +35,22 @@ export default function HowItWorks() {
 
   const steps = [
     {
-      icon: Search,
       title: 'Search & Filter',
       desc: 'Browse thousands of verified listings with advanced filters.',
-      step: '01'
+      step: '01',
+      icon: Search
     },
     {
-      icon: Video,
       title: 'Virtual Tour',
       desc: 'Take immersive 360° tours and view properties from anywhere.',
-      step: '02'
+      step: '02',
+      icon: Video
     },
     {
-      icon: CreditCard,
       title: 'Book & Pay',
       desc: 'Secure your apartment with our safe payment system.',
-      step: '03'
+      step: '03',
+      icon: CreditCard
     },
   ]
 
@@ -86,8 +86,8 @@ export default function HowItWorks() {
           whileInView="visible"
           viewport={{ once: true, amount: 0.1 }}
         >
-          {steps.map((item, index) => {
-            const IconComponent = item.icon;
+          {steps.map((item) => {
+            const Icon = item.icon
             return (
               <motion.div
                 key={item.title}
@@ -108,7 +108,7 @@ export default function HowItWorks() {
                       whileHover={{ scale: 1.1, rotate: 5 }}
                       transition={{ duration: 0.3, type: "spring", stiffness: 300 }}
                     >
-                      <IconComponent className="h-10 w-10 text-white" strokeWidth={2} />
+                      <Icon className="h-10 w-10 text-white" strokeWidth={2} />
                     </motion.div>
                     
                     {/* Content */}
