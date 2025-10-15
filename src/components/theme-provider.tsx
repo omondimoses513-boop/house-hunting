@@ -1,8 +1,9 @@
-'use client'
+"use client"
 
-import React, { createContext, useContext, useEffect, useState } from 'react'
+import type React from "react"
+import { createContext, useContext, useEffect, useState } from "react"
 
-type Theme = 'dark' | 'light' | 'system'
+type Theme = "dark" | "light" | "system"
 
 type ThemeProviderProps = {
   children: React.ReactNode
@@ -16,7 +17,7 @@ type ThemeProviderState = {
 }
 
 const initialState: ThemeProviderState = {
-  theme: 'system',
+  theme: "system",
   setTheme: () => null,
 }
 
@@ -24,12 +25,12 @@ const ThemeProviderContext = createContext<ThemeProviderState>(initialState)
 
 export function ThemeProvider({
   children,
-  defaultTheme = 'system',
-  storageKey = 'tyrent-ui-theme',
+  defaultTheme = "system",
+  storageKey = "tyrent-ui-theme",
   ...props
 }: ThemeProviderProps) {
   const [theme, setTheme] = useState<Theme>(() => {
-    if (typeof window !== 'undefined') {
+    if (typeof window !== "undefined") {
       return (localStorage.getItem(storageKey) as Theme) || defaultTheme
     }
     return defaultTheme
@@ -38,12 +39,10 @@ export function ThemeProvider({
   useEffect(() => {
     const root = window.document.documentElement
 
-    root.classList.remove('light', 'dark')
+    root.classList.remove("light", "dark")
 
-    if (theme === 'system') {
-      const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches
-        ? 'dark'
-        : 'light'
+    if (theme === "system") {
+      const systemTheme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"
 
       root.classList.add(systemTheme)
       return
@@ -70,15 +69,14 @@ export function ThemeProvider({
 export const useTheme = () => {
   const context = useContext(ThemeProviderContext)
 
-  if (context === undefined)
-    throw new Error('useTheme must be used within a ThemeProvider')
+  if (context === undefined) throw new Error("useTheme must be used within a ThemeProvider")
 
   return context
 }
 
 // Dark Mode Toggle Component
-import { Button } from '@/components/ui/button'
-import { Moon, Sun, Monitor } from 'lucide-react'
+import { Button } from "@/components/ui/button"
+import { Moon, Sun, Monitor } from "lucide-react"
 
 export function ThemeToggle() {
   const { theme, setTheme } = useTheme()
@@ -97,26 +95,26 @@ export function ThemeToggle() {
   }
 
   const cycleTheme = () => {
-    if (theme === 'light') {
-      setTheme('dark')
-    } else if (theme === 'dark') {
-      setTheme('system')
+    if (theme === "light") {
+      setTheme("dark")
+    } else if (theme === "dark") {
+      setTheme("system")
     } else {
-      setTheme('light')
+      setTheme("light")
     }
   }
 
   return (
-    <Button 
-      variant="ghost" 
-      size="icon" 
+    <Button
+      variant="ghost"
+      size="icon"
       onClick={cycleTheme}
       className="rounded-full hover:bg-accent transition-colors"
       title={`Current theme: ${theme}. Click to cycle themes.`}
     >
-      {theme === 'light' && <Sun className="h-5 w-5" />}
-      {theme === 'dark' && <Moon className="h-5 w-5" />}
-      {theme === 'system' && <Monitor className="h-5 w-5" />}
+      {theme === "light" && <Sun className="h-5 w-5" />}
+      {theme === "dark" && <Moon className="h-5 w-5" />}
+      {theme === "system" && <Monitor className="h-5 w-5" />}
     </Button>
   )
 }

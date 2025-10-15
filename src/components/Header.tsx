@@ -1,14 +1,14 @@
-'use client'
+"use client"
 
-import React, { useState, useEffect } from 'react'
-import Link from 'next/link'
-import { Button } from '@/components/ui/button'
-import { useTheme } from '@/components/theme-provider'
-import { 
-  Menu, 
-  User, 
-  Heart, 
-  Bell, 
+import { useState, useEffect } from "react"
+import Link from "next/link"
+import { Button } from "@/components/ui/button"
+import { useTheme } from "@/components/theme-provider"
+import {
+  Menu,
+  User,
+  Heart,
+  Bell,
   Building2,
   LogIn,
   UserPlus,
@@ -16,8 +16,9 @@ import {
   Home,
   Search,
   Sun,
-  Moon
-} from 'lucide-react'
+  Moon,
+  LayoutDashboard,
+} from "lucide-react"
 
 export default function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
@@ -34,8 +35,8 @@ export default function Header() {
       setScrolled(window.scrollY > 50)
     }
 
-    window.addEventListener('scroll', handleScroll)
-    return () => window.removeEventListener('scroll', handleScroll)
+    window.addEventListener("scroll", handleScroll)
+    return () => window.removeEventListener("scroll", handleScroll)
   }, [])
 
   useEffect(() => {
@@ -45,15 +46,15 @@ export default function Header() {
   }, [scrolled])
 
   const toggleTheme = () => {
-    setTheme(theme === 'light' ? 'dark' : 'light')
+    setTheme(theme === "light" ? "dark" : "light")
   }
 
   return (
-    <header className={`fixed top-0 left-0 right-0 z-50 transition-all duration-500 ${
-        scrolled
-          ? "bg-background/95 backdrop-blur-md border-b border-border/50 shadow-sm" 
-          : "bg-transparent"
-      }`}>
+    <header
+      className={`fixed top-0 left-0 right-0 z-50 transition-all duration-500 ${
+        scrolled ? "bg-background/95 backdrop-blur-md border-b border-border/50 shadow-sm" : "bg-transparent"
+      }`}
+    >
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex h-16 items-center justify-between">
           {/* Logo */}
@@ -61,9 +62,7 @@ export default function Header() {
             <div className="tyrent-gradient w-8 h-8 rounded-lg flex items-center justify-center shadow-lg">
               <Building2 className="h-5 w-5 text-white" />
             </div>
-            <span className={`text-xl font-bold transition-colors duration-300 font-montserrat ${
-              scrolled ? 'text-foreground' : 'text-white drop-shadow-lg'
-            }`}>
+            <span className="text-xl font-bold text-foreground transition-colors duration-300 font-montserrat">
               Tyrent
             </span>
           </Link>
@@ -71,39 +70,35 @@ export default function Header() {
           {/* Desktop Navigation */}
           <nav className="hidden md:flex items-center space-x-1">
             <Link href="/">
-              <Button 
-                variant="ghost" 
-                className={`text-sm font-medium rounded-full px-4 transition-colors duration-300 font-nunito ${
-                  scrolled 
-                    ? 'text-foreground hover:bg-accent' 
-                    : 'text-white hover:bg-white/10'
-                }`}
+              <Button
+                variant="ghost"
+                className="text-sm font-medium rounded-full px-4 text-foreground hover:bg-accent transition-colors duration-300 font-nunito"
               >
                 Home
               </Button>
             </Link>
             <Link href="/properties">
-              <Button 
-                variant="ghost" 
-                className={`text-sm font-medium rounded-full px-4 transition-colors duration-300 font-nunito ${
-                  scrolled 
-                    ? 'text-foreground hover:bg-accent' 
-                    : 'text-white hover:bg-white/10'
-                }`}
+              <Button
+                variant="ghost"
+                className="text-sm font-medium rounded-full px-4 text-foreground hover:bg-accent transition-colors duration-300 font-nunito"
               >
                 Properties
               </Button>
             </Link>
-            <Link href="/host">
-              <Button 
-                variant="ghost" 
-                className={`text-sm font-medium rounded-full px-4 transition-colors duration-300 font-nunito ${
-                  scrolled 
-                    ? 'text-foreground hover:bg-accent' 
-                    : 'text-white hover:bg-white/10'
-                }`}
+            <Link href="/landlord/register">
+              <Button
+                variant="ghost"
+                className="text-sm font-medium rounded-full px-4 text-foreground hover:bg-accent transition-colors duration-300 font-nunito"
               >
                 Become a Landlord
+              </Button>
+            </Link>
+            <Link href="/tenant/dashboard">
+              <Button
+                variant="ghost"
+                className="text-sm font-medium rounded-full px-4 text-foreground hover:bg-accent transition-colors duration-300 font-nunito"
+              >
+                My Bookings
               </Button>
             </Link>
           </nav>
@@ -112,82 +107,44 @@ export default function Header() {
           <div className="hidden md:flex items-center space-x-2">
             {/* Theme Toggle */}
             {mounted && (
-              <Button 
-                variant="ghost" 
-                size="icon" 
+              <Button
+                variant="ghost"
+                size="icon"
                 onClick={toggleTheme}
-                className={`rounded-full transition-colors duration-300 ${
-                  scrolled 
-                    ? 'hover:bg-accent' 
-                    : 'hover:bg-white/10'
-                }`}
-                title={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
+                className="rounded-full hover:bg-accent transition-colors duration-300"
+                title={`Switch to ${theme === "light" ? "dark" : "light"} mode`}
               >
-                {theme === 'light' ? (
-                  <Moon className={`h-5 w-5 transition-colors duration-300 ${
-                    scrolled ? 'text-muted-foreground' : 'text-white'
-                  }`} />
+                {theme === "light" ? (
+                  <Moon className="h-5 w-5 text-muted-foreground" />
                 ) : (
-                  <Sun className={`h-5 w-5 transition-colors duration-300 ${
-                    scrolled ? 'text-muted-foreground' : 'text-white'
-                  }`} />
+                  <Sun className="h-5 w-5 text-muted-foreground" />
                 )}
               </Button>
             )}
 
             {/* Notifications */}
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              className={`rounded-full transition-colors duration-300 ${
-                scrolled 
-                  ? 'hover:bg-accent' 
-                  : 'hover:bg-white/10'
-              }`}
-            >
-              <Bell className={`h-5 w-5 transition-colors duration-300 ${
-                scrolled ? 'text-muted-foreground' : 'text-white'
-              }`} />
+            <Button variant="ghost" size="icon" className="rounded-full hover:bg-accent transition-colors duration-300">
+              <Bell className="h-5 w-5 text-muted-foreground" />
             </Button>
 
             {/* Favorites */}
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              className={`rounded-full transition-colors duration-300 ${
-                scrolled 
-                  ? 'hover:bg-accent' 
-                  : 'hover:bg-white/10'
-              }`}
-            >
-              <Heart className={`h-5 w-5 transition-colors duration-300 ${
-                scrolled ? 'text-muted-foreground' : 'text-white'
-              }`} />
-            </Button>
+            <Link href="/tenant/dashboard">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="rounded-full hover:bg-accent transition-colors duration-300"
+              >
+                <Heart className="h-5 w-5 text-muted-foreground" />
+              </Button>
+            </Link>
 
             {/* User Menu */}
-            <div className={`flex items-center space-x-2 rounded-full p-1 hover:shadow-md transition-all duration-300 cursor-pointer ${
-              scrolled 
-                ? 'border border-border bg-background' 
-                : 'border border-white/30 bg-white/10 backdrop-blur-sm'
-            }`}>
-              <Button 
-                variant="ghost" 
-                size="icon" 
-                className="rounded-full h-8 w-8"
-              >
-                <Menu className={`h-4 w-4 transition-colors duration-300 ${
-                  scrolled ? 'text-muted-foreground' : 'text-white'
-                }`} />
+            <div className="flex items-center space-x-2 rounded-full p-1 border border-border bg-background hover:shadow-md transition-all duration-300 cursor-pointer">
+              <Button variant="ghost" size="icon" className="rounded-full h-8 w-8">
+                <Menu className="h-4 w-4 text-muted-foreground" />
               </Button>
-              <Button 
-                variant="ghost" 
-                size="icon" 
-                className="rounded-full h-8 w-8"
-              >
-                <User className={`h-4 w-4 transition-colors duration-300 ${
-                  scrolled ? 'text-muted-foreground' : 'text-white'
-                }`} />
+              <Button variant="ghost" size="icon" className="rounded-full h-8 w-8">
+                <User className="h-4 w-4 text-muted-foreground" />
               </Button>
             </div>
           </div>
@@ -197,15 +154,9 @@ export default function Header() {
             variant="ghost"
             size="icon"
             onClick={() => setIsMenuOpen(!isMenuOpen)}
-            className={`md:hidden rounded-full z-50 ${
-              scrolled ? 'hover:bg-accent' : 'text-white hover:bg-white/10'
-            }`}
+            className="md:hidden rounded-full z-50 hover:bg-accent"
           >
-            {isMenuOpen ? (
-              <X className="h-6 w-6" />
-            ) : (
-              <Menu className="h-6 w-6" />
-            )}
+            {isMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
           </Button>
         </div>
       </div>
@@ -214,39 +165,47 @@ export default function Header() {
       {isMenuOpen && (
         <>
           {/* Backdrop */}
-          <div 
+          <div
             className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 md:hidden"
             onClick={() => setIsMenuOpen(false)}
           />
-          
+
           {/* Menu Panel */}
           <div className="fixed top-16 left-0 right-0 bottom-0 bg-background z-40 md:hidden overflow-y-auto">
             <div className="container mx-auto px-4 py-6">
               {/* Navigation Links */}
               <div className="space-y-1 mb-8">
-                <Link 
-                  href="/" 
+                <Link
+                  href="/"
                   onClick={() => setIsMenuOpen(false)}
                   className="flex items-center space-x-3 px-4 py-3 rounded-lg hover:bg-accent transition-colors group"
                 >
                   <Home className="h-5 w-5 text-muted-foreground group-hover:text-foreground" />
                   <span className="text-base font-medium text-foreground font-nunito">Home</span>
                 </Link>
-                <Link 
-                  href="/properties" 
+                <Link
+                  href="/properties"
                   onClick={() => setIsMenuOpen(false)}
                   className="flex items-center space-x-3 px-4 py-3 rounded-lg hover:bg-accent transition-colors group"
                 >
                   <Search className="h-5 w-5 text-muted-foreground group-hover:text-foreground" />
                   <span className="text-base font-medium text-foreground font-nunito">Browse Properties</span>
                 </Link>
-                <Link 
-                  href="/host" 
+                <Link
+                  href="/landlord/register"
                   onClick={() => setIsMenuOpen(false)}
                   className="flex items-center space-x-3 px-4 py-3 rounded-lg hover:bg-accent transition-colors group"
                 >
                   <Building2 className="h-5 w-5 text-muted-foreground group-hover:text-foreground" />
                   <span className="text-base font-medium text-foreground font-nunito">Become a Landlord</span>
+                </Link>
+                <Link
+                  href="/tenant/dashboard"
+                  onClick={() => setIsMenuOpen(false)}
+                  className="flex items-center space-x-3 px-4 py-3 rounded-lg hover:bg-accent transition-colors group"
+                >
+                  <LayoutDashboard className="h-5 w-5 text-muted-foreground group-hover:text-foreground" />
+                  <span className="text-base font-medium text-foreground font-nunito">My Bookings</span>
                 </Link>
               </div>
 
@@ -256,10 +215,12 @@ export default function Header() {
                   <span className="text-sm font-semibold text-muted-foreground font-montserrat">Quick Actions</span>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
-                  <button className="flex flex-col items-center justify-center p-4 rounded-xl border border-border hover:bg-accent transition-colors">
-                    <Heart className="h-6 w-6 text-muted-foreground mb-2" />
-                    <span className="text-xs font-medium font-nunito">Favorites</span>
-                  </button>
+                  <Link href="/tenant/dashboard">
+                    <button className="flex flex-col items-center justify-center p-4 rounded-xl border border-border hover:bg-accent transition-colors w-full">
+                      <Heart className="h-6 w-6 text-muted-foreground mb-2" />
+                      <span className="text-xs font-medium font-nunito">Favorites</span>
+                    </button>
+                  </Link>
                   <button className="flex flex-col items-center justify-center p-4 rounded-xl border border-border hover:bg-accent transition-colors">
                     <Bell className="h-6 w-6 text-muted-foreground mb-2" />
                     <span className="text-xs font-medium font-nunito">Notifications</span>
@@ -269,17 +230,17 @@ export default function Header() {
 
               {/* Auth Buttons */}
               <div className="space-y-3 px-4">
-                <Button 
-                  size="lg" 
-                  variant="outline" 
-                  className="w-full justify-center font-nunito"
+                <Button
+                  size="lg"
+                  variant="outline"
+                  className="w-full justify-center font-nunito bg-transparent"
                   onClick={() => setIsMenuOpen(false)}
                 >
                   <LogIn className="h-4 w-4 mr-2" />
                   Sign In
                 </Button>
-                <Button 
-                  size="lg" 
+                <Button
+                  size="lg"
                   className="w-full justify-center tyrent-gradient text-white font-nunito"
                   onClick={() => setIsMenuOpen(false)}
                 >
@@ -292,19 +253,10 @@ export default function Header() {
               {mounted && (
                 <div className="flex items-center justify-between px-4 py-4 mt-6 border-t border-border">
                   <span className="text-sm font-medium text-foreground font-nunito">
-                    {theme === 'light' ? 'Light Mode' : 'Dark Mode'}
+                    {theme === "light" ? "Light Mode" : "Dark Mode"}
                   </span>
-                  <Button 
-                    variant="outline" 
-                    size="icon"
-                    onClick={toggleTheme}
-                    className="rounded-full"
-                  >
-                    {theme === 'light' ? (
-                      <Moon className="h-5 w-5" />
-                    ) : (
-                      <Sun className="h-5 w-5" />
-                    )}
+                  <Button variant="outline" size="icon" onClick={toggleTheme} className="rounded-full bg-transparent">
+                    {theme === "light" ? <Moon className="h-5 w-5" /> : <Sun className="h-5 w-5" />}
                   </Button>
                 </div>
               )}
