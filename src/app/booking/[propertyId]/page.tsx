@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
+import { sampleProperties } from "@/data/SampleProperties"
+import { PageRoutes } from "@/constants/page-routes"
 import {
   Calendar,
   Users,
@@ -36,19 +38,19 @@ export default function BookingCheckout() {
   const [cardCvv, setCardCvv] = useState("")
   const [agreedToTerms, setAgreedToTerms] = useState(false)
 
-  // Mock property data
-  const property = {
-    id: params?.propertyId,
+  const propertyId = params?.propertyId as string
+  const propertyData = sampleProperties.find((p) => p.id === propertyId)
+
+  // Fallback to mock data if property not found
+  const property = propertyData || {
+    id: propertyId,
     title: "Modern 2BR Apartment in Kilimani",
     location: "Kilimani, Nairobi",
-    unitNumber: "A101",
     bedrooms: 2,
     bathrooms: 2,
     size: 1200,
-    rent: 65000,
-    deposit: 130000,
-    serviceFee: 5000,
-    image: "/modern-apartment-living-room.png",
+    price: 65000,
+    images: ["/modern-apartment-living-room.png"],
     landlord: {
       name: "John Kamau",
       phone: "+254 700 000 000",
@@ -56,12 +58,15 @@ export default function BookingCheckout() {
     },
   }
 
-  const total = property.rent + property.deposit + property.serviceFee
+  const rent = property.price || 65000
+  const bookingFee = 350
+  const serviceFee = 0
+  const total = bookingFee
 
   const handleSubmit = () => {
-    console.log("Booking submitted")
+    if (!moveInDate || !agreedToTerms) return
     // Handle booking submission
-    router.push("/booking/confirmation")
+    router.push(PageRoutes.BOOKING_CONFIRMATION)
   }
 
   return (
@@ -357,7 +362,7 @@ export default function BookingCheckout() {
                     {/* Property Preview */}
                     <div className="mb-6">
                       <img
-                        src={property.image || "/placeholder.svg"}
+                        src={property.images?.[0] || "/placeholder.svg"}
                         alt={property.title}
                         className="w-full h-48 object-cover rounded-lg mb-4"
                       />
@@ -392,23 +397,15 @@ export default function BookingCheckout() {
 
                       <div className="space-y-3 text-sm font-nunito">
                         <div className="flex justify-between">
-                          <span className="text-muted-foreground">Monthly Rent</span>
-                          <span className="font-semibold">KES {property.rent.toLocaleString()}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Deposit (2 months)</span>
-                          <span className="font-semibold">KES {property.deposit.toLocaleString()}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Service Fee</span>
-                          <span className="font-semibold">KES {property.serviceFee.toLocaleString()}</span>
+                          <span className="text-muted-foreground">Booking Fee (48-hour reservation)</span>
+                          <span className="font-semibold">KES {bookingFee.toLocaleString()}</span>
                         </div>
 
                         <Separator />
 
                         <div className="flex justify-between text-lg">
                           <span className="font-bold text-foreground">Total Due Today</span>
-                          <span className="font-bold text-foreground">KES {total.toLocaleString()}</span>
+                          <span className="font-bold text-primary">KES {total.toLocaleString()}</span>
                         </div>
                       </div>
                     </div>
@@ -417,15 +414,15 @@ export default function BookingCheckout() {
                     <div className="bg-muted/50 rounded-lg p-4 mb-6">
                       <div className="flex items-center gap-2 mb-2">
                         <span className="text-sm font-semibold text-foreground font-montserrat">Landlord:</span>
-                        {property.landlord.verified && (
+                        {property.landlord?.verified && (
                           <Badge variant="outline" className="text-green-600 border-green-600">
                             <CheckCircle2 className="h-3 w-3 mr-1" />
                             Verified
                           </Badge>
                         )}
                       </div>
-                      <p className="text-sm text-foreground font-nunito mb-1">{property.landlord.name}</p>
-                      <p className="text-xs text-muted-foreground font-nunito">{property.landlord.phone}</p>
+                      <p className="text-sm text-foreground font-nunito mb-1">{property.landlord?.name}</p>
+                      <p className="text-xs text-muted-foreground font-nunito">{property.landlord?.phone}</p>
                     </div>
 
                     {/* Submit Button */}
@@ -435,7 +432,7 @@ export default function BookingCheckout() {
                       className="w-full tyrent-gradient text-white py-6 text-lg font-montserrat shadow-lg"
                     >
                       <CheckCircle2 className="h-5 w-5 mr-2" />
-                      Confirm and Pay
+                      Pay KES {total} & Reserve
                     </Button>
 
                     {/* Security Badge */}
@@ -452,8 +449,8 @@ export default function BookingCheckout() {
                     <div className="flex items-center gap-3">
                       <Clock className="h-5 w-5 text-primary shrink-0" />
                       <div className="text-sm font-nunito">
-                        <p className="font-semibold text-foreground">Quick Response</p>
-                        <p className="text-muted-foreground">Landlord typically responds within 24 hours</p>
+                        <p className="font-semibold text-foreground">Landlord Response</p>
+                        <p className="text-muted-foreground">Landlord will contact you within 48 hours to proceed</p>
                       </div>
                     </div>
                   </CardContent>

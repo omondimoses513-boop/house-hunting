@@ -37,7 +37,7 @@ export default function BookingConfirmation() {
               Booking Request Submitted!
             </h1>
             <p className="text-lg text-muted-foreground font-nunito">
-              Your booking request has been sent to the landlord for approval
+              Your 48-hour reservation is confirmed. The landlord will contact you shortly.
             </p>
           </motion.div>
 
@@ -87,8 +87,8 @@ export default function BookingConfirmation() {
 
                 <div className="mt-6 pt-6 border-t border-border">
                   <div className="flex justify-between items-center mb-2">
-                    <span className="text-muted-foreground font-nunito">Total Paid</span>
-                    <span className="text-2xl font-bold text-foreground font-montserrat">KES 200,000</span>
+                    <span className="text-muted-foreground font-nunito">Booking Fee Paid</span>
+                    <span className="text-2xl font-bold text-foreground font-montserrat">KES 350</span>
                   </div>
                   <p className="text-xs text-muted-foreground font-nunito">Payment successful via M-Pesa</p>
                 </div>
@@ -119,9 +119,9 @@ export default function BookingConfirmation() {
                       2
                     </div>
                     <div>
-                      <p className="font-semibold text-foreground font-montserrat">Email Notification</p>
+                      <p className="font-semibold text-foreground font-montserrat">Landlord Contact</p>
                       <p className="text-sm text-muted-foreground font-nunito">
-                        You'll receive an email with the landlord's decision and next steps
+                        The landlord will contact you via phone or email to discuss next steps and rental agreement
                       </p>
                     </div>
                   </div>
@@ -131,9 +131,9 @@ export default function BookingConfirmation() {
                       3
                     </div>
                     <div>
-                      <p className="font-semibold text-foreground font-montserrat">Move-in Coordination</p>
+                      <p className="font-semibold text-foreground font-montserrat">Complete Rental Agreement</p>
                       <p className="text-sm text-muted-foreground font-nunito">
-                        Once approved, coordinate with the landlord for key handover and move-in
+                        Once approved, finalize the rental agreement and arrange move-in with the landlord
                       </p>
                     </div>
                   </div>

@@ -41,7 +41,7 @@ export default function TenantDashboard() {
     leaseEnd: "2025-12-31",
     nextPaymentDue: "2025-03-01",
     daysUntilPayment: 5,
-    image: "/modern-apartment-living-room.png",
+    image: "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=1200",
   }
 
   const paymentHistory = [

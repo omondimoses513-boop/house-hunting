@@ -1,15 +1,17 @@
-'use client'
+"use client"
 
-import React, { useState, useEffect, useRef } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
-import Link from 'next/link'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import { sampleProperties } from '@/data/SampleProperties'
-import { 
-  MapPin, 
-  Star, 
+import { useState, useEffect, useRef } from "react"
+import { motion, AnimatePresence } from "framer-motion"
+import Link from "next/link"
+import { useRouter } from "next/navigation"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { sampleProperties } from "@/data/SampleProperties"
+import { PageRoutes } from "@/constants/page-routes"
+import {
+  MapPin,
+  Star,
   Heart,
   BedDouble,
   Bath,
@@ -23,51 +25,68 @@ import {
   Wifi,
   Car,
   Dumbbell,
-  Shield
-} from 'lucide-react'
+  Shield,
+  Video,
+} from "lucide-react"
 
 export default function PropertiesListing() {
+  const router = useRouter()
   const [favorites, setFavorites] = useState<string[]>([])
-  const [selectedArea, setSelectedArea] = useState('All Areas')
-  const [selectedType, setSelectedType] = useState('All Types')
+  const [selectedArea, setSelectedArea] = useState("All Areas")
+  const [selectedType, setSelectedType] = useState("All Types")
   const [displayCount, setDisplayCount] = useState(12)
   const [isLoading, setIsLoading] = useState(false)
   const [showFilters, setShowFilters] = useState(false)
-  const [selectedBedrooms, setSelectedBedrooms] = useState('Any')
+  const [selectedBedrooms, setSelectedBedrooms] = useState("Any")
   const [selectedAmenities, setSelectedAmenities] = useState<string[]>([])
   const [priceRange, setPriceRange] = useState(100000)
   const [focusedField, setFocusedField] = useState<string | null>(null)
   const observerTarget = useRef(null)
 
-  const areas = ['All Areas', 'Kilimani', 'Westlands', 'Karen', 'Lavington', 'Ruiru', 'Runda', 'South B', 'Kileleshwa', 'Roysambu', 'Upperhill', 'Mirema', 'Thika', 'Juja']
-  const propertyTypes = ['All Types', 'Bedsitter', '1 Bedroom', '2 Bedrooms', '3 Bedrooms', '4+ Bedrooms']
+  const areas = [
+    "All Areas",
+    "Kilimani",
+    "Westlands",
+    "Karen",
+    "Lavington",
+    "Ruiru",
+    "Runda",
+    "South B",
+    "Kileleshwa",
+    "Roysambu",
+    "Upperhill",
+    "Mirema",
+    "Thika",
+    "Juja",
+  ]
+  const propertyTypes = ["All Types", "Bedsitter", "1 Bedroom", "2 Bedrooms", "3 Bedrooms", "4+ Bedrooms"]
 
   const toggleFavorite = (id: string) => {
-    setFavorites(prev => 
-      prev.includes(id) ? prev.filter(f => f !== id) : [...prev, id]
-    )
+    setFavorites((prev) => (prev.includes(id) ? prev.filter((f) => f !== id) : [...prev, id]))
   }
 
   const toggleAmenity = (amenity: string) => {
-    setSelectedAmenities(prev => 
-      prev.includes(amenity) 
-        ? prev.filter(a => a !== amenity)
-        : [...prev, amenity]
-    )
+    setSelectedAmenities((prev) => (prev.includes(amenity) ? prev.filter((a) => a !== amenity) : [...prev, amenity]))
   }
 
-  const filteredProperties = sampleProperties.filter(p => {
-    const matchesArea = selectedArea === 'All Areas' || p.area === selectedArea
-    const matchesType = selectedType === 'All Types' || 
-      (selectedType === 'Bedsitter' && p.bedrooms === 0) ||
-      (selectedType === '1 Bedroom' && p.bedrooms === 1) ||
-      (selectedType === '2 Bedrooms' && p.bedrooms === 2) ||
-      (selectedType === '3 Bedrooms' && p.bedrooms === 3) ||
-      (selectedType === '4+ Bedrooms' && p.bedrooms >= 4)
+  const handleBooking = (propertyId: string) => {
+    router.push(PageRoutes.BOOKING(propertyId))
+  }
+
+  const filteredProperties = sampleProperties.filter((p) => {
+    const matchesArea = selectedArea === "All Areas" || p.area === selectedArea
+    const matchesType =
+      selectedType === "All Types" ||
+      (selectedType === "Bedsitter" && p.bedrooms === 0) ||
+      (selectedType === "1 Bedroom" && p.bedrooms === 1) ||
+      (selectedType === "2 Bedrooms" && p.bedrooms === 2) ||
+      (selectedType === "3 Bedrooms" && p.bedrooms === 3) ||
+      (selectedType === "4+ Bedrooms" && p.bedrooms >= 4)
     const matchesPrice = p.price <= priceRange
-    const matchesBedrooms = selectedBedrooms === 'Any' || 
-      (selectedBedrooms === '4+' && p.bedrooms >= 4) ||
-      (selectedBedrooms === String(p.bedrooms))
+    const matchesBedrooms =
+      selectedBedrooms === "Any" ||
+      (selectedBedrooms === "4+" && p.bedrooms >= 4) ||
+      selectedBedrooms === String(p.bedrooms)
     return matchesArea && matchesType && matchesPrice && matchesBedrooms
   })
 
@@ -77,16 +96,16 @@ export default function PropertiesListing() {
   // Infinite scroll
   useEffect(() => {
     const observer = new IntersectionObserver(
-      entries => {
+      (entries) => {
         if (entries[0].isIntersecting && hasMore && !isLoading) {
           setIsLoading(true)
           setTimeout(() => {
-            setDisplayCount(prev => prev + 12)
+            setDisplayCount((prev) => prev + 12)
             setIsLoading(false)
           }, 800)
         }
       },
-      { threshold: 0.5 }
+      { threshold: 0.5 },
     )
 
     if (observerTarget.current) {
@@ -105,19 +124,15 @@ export default function PropertiesListing() {
       {/* Main Content */}
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 -mt-8 relative z-20 pb-16">
         {/* Integrated Search Bar */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mb-6"
-        >
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mb-6">
           <Card className="shadow-2xl border-0">
             <CardContent className="p-2">
               <div className="flex flex-col lg:flex-row items-stretch lg:items-center rounded-2xl lg:rounded-full bg-muted">
                 {/* Location */}
-                <motion.div 
+                <motion.div
                   className="flex-1 px-6 py-4 cursor-pointer rounded-t-2xl lg:rounded-l-full lg:rounded-tr-none hover:bg-muted/80 transition-colors relative"
                   whileHover={{ scale: 1.02 }}
-                  onFocus={() => setFocusedField('location')}
+                  onFocus={() => setFocusedField("location")}
                   onBlur={() => setFocusedField(null)}
                 >
                   <label className="block text-xs font-semibold text-muted-foreground mb-1 font-montserrat">
@@ -130,13 +145,15 @@ export default function PropertiesListing() {
                       onChange={(e) => setSelectedArea(e.target.value)}
                       className="w-full bg-transparent border-none outline-none text-sm text-foreground font-nunito cursor-pointer"
                     >
-                      {areas.map(area => (
-                        <option key={area} value={area}>{area}</option>
+                      {areas.map((area) => (
+                        <option key={area} value={area}>
+                          {area}
+                        </option>
                       ))}
                     </select>
                   </div>
-                  {focusedField === 'location' && (
-                    <motion.div 
+                  {focusedField === "location" && (
+                    <motion.div
                       className="absolute inset-0 border-2 border-primary rounded-2xl lg:rounded-l-full lg:rounded-r-none pointer-events-none"
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
@@ -147,10 +164,10 @@ export default function PropertiesListing() {
                 <div className="hidden lg:block w-px h-12 bg-border self-center" />
 
                 {/* Property Type */}
-                <motion.div 
+                <motion.div
                   className="flex-1 px-6 py-4 cursor-pointer hover:bg-muted/80 transition-colors relative"
                   whileHover={{ scale: 1.02 }}
-                  onFocus={() => setFocusedField('type')}
+                  onFocus={() => setFocusedField("type")}
                   onBlur={() => setFocusedField(null)}
                 >
                   <label className="block text-xs font-semibold text-muted-foreground mb-1 font-montserrat">
@@ -158,18 +175,20 @@ export default function PropertiesListing() {
                   </label>
                   <div className="flex items-center">
                     <Home className="h-4 w-4 text-muted-foreground mr-2" />
-                    <select 
+                    <select
                       value={selectedType}
                       onChange={(e) => setSelectedType(e.target.value)}
                       className="w-full bg-transparent border-none outline-none text-sm text-foreground font-nunito cursor-pointer"
                     >
-                      {propertyTypes.map(type => (
-                        <option key={type} value={type}>{type}</option>
+                      {propertyTypes.map((type) => (
+                        <option key={type} value={type}>
+                          {type}
+                        </option>
                       ))}
                     </select>
                   </div>
-                  {focusedField === 'type' && (
-                    <motion.div 
+                  {focusedField === "type" && (
+                    <motion.div
                       className="absolute inset-0 border-2 border-primary rounded-2xl pointer-events-none"
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
@@ -180,10 +199,10 @@ export default function PropertiesListing() {
                 <div className="hidden lg:block w-px h-12 bg-border self-center" />
 
                 {/* Price Range */}
-                <motion.div 
+                <motion.div
                   className="flex-1 px-6 py-4 cursor-pointer rounded-b-2xl lg:rounded-r-full lg:rounded-bl-none hover:bg-muted/80 transition-colors relative"
                   whileHover={{ scale: 1.02 }}
-                  onFocus={() => setFocusedField('price')}
+                  onFocus={() => setFocusedField("price")}
                   onBlur={() => setFocusedField(null)}
                 >
                   <label className="block text-xs font-semibold text-muted-foreground mb-1 font-montserrat">
@@ -191,10 +210,12 @@ export default function PropertiesListing() {
                   </label>
                   <div className="flex items-center">
                     <DollarSign className="h-4 w-4 text-muted-foreground mr-2" />
-                    <span className="text-sm text-foreground font-nunito">Up to KES {(priceRange / 1000).toFixed(0)}K</span>
+                    <span className="text-sm text-foreground font-nunito">
+                      Up to KES {(priceRange / 1000).toFixed(0)}K
+                    </span>
                   </div>
-                  {focusedField === 'price' && (
-                    <motion.div 
+                  {focusedField === "price" && (
+                    <motion.div
                       className="absolute inset-0 border-2 border-primary rounded-2xl lg:rounded-r-full lg:rounded-l-none pointer-events-none"
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
@@ -205,8 +226,8 @@ export default function PropertiesListing() {
                 {/* Search Button */}
                 <div className="lg:pr-2 p-2 lg:p-0">
                   <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                    <Button 
-                      size="lg" 
+                    <Button
+                      size="lg"
                       className="w-full lg:w-auto tyrent-gradient hover:tyrent-gradient-dark text-white rounded-full px-8 py-6 shadow-lg font-montserrat transition-all duration-300"
                     >
                       <Search className="h-5 w-5 lg:mr-2" />
@@ -225,7 +246,7 @@ export default function PropertiesListing() {
                   whileTap={{ scale: 0.95 }}
                 >
                   <SlidersHorizontal className="h-4 w-4" />
-                  <span>{showFilters ? 'Hide' : 'Show'} filters</span>
+                  <span>{showFilters ? "Hide" : "Show"} filters</span>
                 </motion.button>
 
                 <div className="flex gap-2">
@@ -250,7 +271,7 @@ export default function PropertiesListing() {
           {showFilters && (
             <motion.div
               initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
+              animate={{ opacity: 1, height: "auto" }}
               exit={{ opacity: 0, height: 0 }}
               transition={{ duration: 0.3 }}
             >
@@ -275,19 +296,19 @@ export default function PropertiesListing() {
                         Bedrooms
                       </label>
                       <div className="grid grid-cols-6 gap-3">
-                        {['Any', '0', '1', '2', '3', '4+'].map((bed) => (
+                        {["Any", "0", "1", "2", "3", "4+"].map((bed) => (
                           <motion.button
                             key={bed}
                             onClick={() => setSelectedBedrooms(bed)}
                             className={`px-4 py-3 rounded-xl border-2 transition-all text-center font-medium font-nunito ${
-                              selectedBedrooms === bed 
-                                ? 'border-primary bg-primary/10 text-primary' 
-                                : 'border-border hover:border-primary/50 hover:bg-muted text-foreground'
+                              selectedBedrooms === bed
+                                ? "border-primary bg-primary/10 text-primary"
+                                : "border-border hover:border-primary/50 hover:bg-muted text-foreground"
                             }`}
                             whileHover={{ scale: 1.05 }}
                             whileTap={{ scale: 0.95 }}
                           >
-                            {bed === '0' ? 'Studio' : bed}
+                            {bed === "0" ? "Studio" : bed}
                           </motion.button>
                         ))}
                       </div>
@@ -300,33 +321,35 @@ export default function PropertiesListing() {
                       </label>
                       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
                         {[
-                          { icon: Wifi, label: 'WiFi' },
-                          { icon: Car, label: 'Parking' },
-                          { icon: Dumbbell, label: 'Gym' },
-                          { icon: Shield, label: 'Security' },
-                          { icon: Home, label: 'Furnished' }
+                          { icon: Wifi, label: "WiFi" },
+                          { icon: Car, label: "Parking" },
+                          { icon: Dumbbell, label: "Gym" },
+                          { icon: Shield, label: "Security" },
+                          { icon: Home, label: "Furnished" },
                         ].map((amenity) => (
                           <motion.button
                             key={amenity.label}
                             onClick={() => toggleAmenity(amenity.label)}
                             className={`flex flex-col items-center justify-center p-4 rounded-xl border-2 transition-all space-y-2 ${
                               selectedAmenities.includes(amenity.label)
-                                ? 'border-primary bg-primary/10'
-                                : 'border-border hover:border-primary/50 hover:bg-muted'
+                                ? "border-primary bg-primary/10"
+                                : "border-border hover:border-primary/50 hover:bg-muted"
                             }`}
                             whileHover={{ scale: 1.05, y: -2 }}
                             whileTap={{ scale: 0.95 }}
                           >
-                            <amenity.icon className={`h-6 w-6 ${
-                              selectedAmenities.includes(amenity.label)
-                                ? 'text-primary'
-                                : 'text-muted-foreground'
-                            }`} />
-                            <span className={`text-xs font-medium font-nunito ${
-                              selectedAmenities.includes(amenity.label)
-                                ? 'text-primary'
-                                : 'text-foreground'
-                            }`}>{amenity.label}</span>
+                            <amenity.icon
+                              className={`h-6 w-6 ${
+                                selectedAmenities.includes(amenity.label) ? "text-primary" : "text-muted-foreground"
+                              }`}
+                            />
+                            <span
+                              className={`text-xs font-medium font-nunito ${
+                                selectedAmenities.includes(amenity.label) ? "text-primary" : "text-foreground"
+                              }`}
+                            >
+                              {amenity.label}
+                            </span>
                           </motion.button>
                         ))}
                       </div>
@@ -340,12 +363,14 @@ export default function PropertiesListing() {
                       <div className="space-y-4">
                         <div className="flex items-center justify-between text-sm font-nunito">
                           <span className="text-muted-foreground">KES 10,000</span>
-                          <span className="text-foreground font-semibold text-lg">KES {priceRange.toLocaleString()}</span>
+                          <span className="text-foreground font-semibold text-lg">
+                            KES {priceRange.toLocaleString()}
+                          </span>
                           <span className="text-muted-foreground">KES 200,000</span>
                         </div>
-                        <input 
-                          type="range" 
-                          min="10000" 
+                        <input
+                          type="range"
+                          min="10000"
                           max="200000"
                           value={priceRange}
                           onChange={(e) => setPriceRange(Number(e.target.value))}
@@ -362,7 +387,7 @@ export default function PropertiesListing() {
                       whileHover={{ scale: 1.05 }}
                       whileTap={{ scale: 0.95 }}
                       onClick={() => {
-                        setSelectedBedrooms('Any')
+                        setSelectedBedrooms("Any")
                         setSelectedAmenities([])
                         setPriceRange(100000)
                       }}
@@ -390,11 +415,11 @@ export default function PropertiesListing() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: Math.min(index * 0.05, 0.5) }}
             >
-              <Card className="overflow-hidden border-0 shadow-lg hover:shadow-2xl transition-all duration-300 tyrent-card-hover group">
+              <Card className="overflow-hidden border-0 shadow-lg hover:shadow-2xl transition-all duration-300 tyrent-card-hover group h-full flex flex-col">
                 <div className="relative">
-                  <Link href={`/properties/${property.slug}`}>
-                    <img 
-                      src={property.images[0]} 
+                  <Link href={`${PageRoutes.PROPERTIES}/${property.slug}`}>
+                    <img
+                      src={property.images[0] || "/placeholder.svg"}
                       alt={property.title}
                       className="w-full h-64 object-cover cursor-pointer group-hover:scale-105 transition-transform duration-300"
                     />
@@ -408,11 +433,9 @@ export default function PropertiesListing() {
                     className="absolute top-3 right-3 p-2.5 rounded-full bg-white/90 backdrop-blur-sm hover:bg-white hover:scale-110 transition-all z-10"
                     whileTap={{ scale: 0.9 }}
                   >
-                    <Heart 
+                    <Heart
                       className={`h-5 w-5 ${
-                        favorites.includes(property.id) 
-                          ? 'fill-red-500 text-red-500' 
-                          : 'text-gray-700'
+                        favorites.includes(property.id) ? "fill-red-500 text-red-500" : "text-gray-700"
                       }`}
                     />
                   </motion.button>
@@ -424,8 +447,8 @@ export default function PropertiesListing() {
                   )}
                 </div>
 
-                <Link href={`/properties/${property.slug}`}>
-                  <CardContent className="p-4 cursor-pointer">
+                <Link href={`${PageRoutes.PROPERTIES}/${property.slug}`}>
+                  <CardContent className="p-4 cursor-pointer flex-1">
                     <div className="flex items-start justify-between mb-2">
                       <div className="flex-1">
                         <h3 className="font-bold text-base text-foreground font-montserrat line-clamp-1 group-hover:text-primary transition-colors">
@@ -441,7 +464,7 @@ export default function PropertiesListing() {
                     <div className="flex items-center gap-4 text-xs text-muted-foreground mb-3 font-nunito">
                       <div className="flex items-center">
                         <BedDouble className="h-3.5 w-3.5 mr-1" />
-                        {property.bedrooms === 0 ? 'Studio' : `${property.bedrooms} BR`}
+                        {property.bedrooms === 0 ? "Studio" : `${property.bedrooms} BR`}
                       </div>
                       <div className="flex items-center">
                         <Bath className="h-3.5 w-3.5 mr-1" />
@@ -456,12 +479,8 @@ export default function PropertiesListing() {
                     <div className="flex items-center justify-between pt-3 border-t border-border">
                       <div className="flex items-center gap-1">
                         <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />
-                        <span className="font-semibold text-sm text-foreground font-nunito">
-                          {property.rating}
-                        </span>
-                        <span className="text-xs text-muted-foreground font-nunito">
-                          ({property.reviews})
-                        </span>
+                        <span className="font-semibold text-sm text-foreground font-nunito">{property.rating}</span>
+                        <span className="text-xs text-muted-foreground font-nunito">({property.reviews})</span>
                       </div>
                       <div className="text-right">
                         <p className="text-lg font-bold text-foreground font-montserrat">
@@ -472,6 +491,20 @@ export default function PropertiesListing() {
                     </div>
                   </CardContent>
                 </Link>
+
+                <div className="px-4 pb-4 flex gap-2">
+                  <Button
+                    onClick={() => handleBooking(property.id)}
+                    className="flex-1 tyrent-gradient text-white text-sm font-nunito"
+                    size="sm"
+                  >
+                    Book
+                  </Button>
+                  <Button variant="outline" className="flex-1 text-sm font-nunito bg-transparent" size="sm">
+                    <Video className="h-4 w-4 mr-1" />
+                    Tour
+                  </Button>
+                </div>
               </Card>
             </motion.div>
           ))}
@@ -480,11 +513,7 @@ export default function PropertiesListing() {
         {/* Loading Indicator */}
         {isLoading && (
           <div className="flex justify-center items-center py-12">
-            <motion.div
-              className="flex space-x-2"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-            >
+            <motion.div className="flex space-x-2" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
               {[0, 1, 2].map((i) => (
                 <motion.div
                   key={i}
@@ -494,7 +523,7 @@ export default function PropertiesListing() {
                   }}
                   transition={{
                     duration: 0.6,
-                    repeat: Infinity,
+                    repeat: Number.POSITIVE_INFINITY,
                     delay: i * 0.1,
                   }}
                 />
@@ -508,11 +537,7 @@ export default function PropertiesListing() {
 
         {/* No More Properties */}
         {!hasMore && displayedProperties.length > 0 && (
-          <motion.div 
-            className="text-center py-12"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-          >
+          <motion.div className="text-center py-12" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
             <p className="text-muted-foreground text-base font-nunito">
               You've viewed all {filteredProperties.length} properties
             </p>
@@ -525,12 +550,8 @@ export default function PropertiesListing() {
             <div className="mb-4">
               <Home className="h-16 w-16 text-muted-foreground mx-auto opacity-50" />
             </div>
-            <p className="text-muted-foreground text-lg font-nunito mb-2">
-              No properties found matching your filters
-            </p>
-            <p className="text-sm text-muted-foreground font-nunito">
-              Try adjusting your search criteria
-            </p>
+            <p className="text-muted-foreground text-lg font-nunito mb-2">No properties found matching your filters</p>
+            <p className="text-sm text-muted-foreground font-nunito">Try adjusting your search criteria</p>
           </div>
         )}
       </div>
