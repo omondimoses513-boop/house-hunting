@@ -25,6 +25,9 @@ import {
   MessageCircle,
   X,
   Video,
+  Clock,
+  Home,
+  MapPinIcon,
 } from "lucide-react"
 
 export default function PropertyDetail() {
@@ -197,27 +200,85 @@ export default function PropertyDetail() {
               <CardContent className="p-6">
                 <h2 className="text-2xl font-bold mb-4 font-montserrat">Property Details</h2>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                  <div className="flex flex-col items-center p-4 bg-muted rounded-lg">
-                    <BedDouble className="h-6 w-6 mb-2 text-primary" />
-                    <span className="text-sm text-muted-foreground font-nunito">Bedrooms</span>
-                    <span className="font-bold font-montserrat">
+                  <div className="bg-card p-4 rounded-lg shadow-md">
+                    <div className="flex items-center text-muted-foreground mb-2">
+                      <BedDouble className="h-5 w-5 mr-2" />
+                      <span className="text-sm">Bedrooms</span>
+                    </div>
+                    <p className="text-2xl font-bold text-foreground font-montserrat">
                       {property.bedrooms === 0 ? "Studio" : property.bedrooms}
-                    </span>
+                    </p>
                   </div>
-                  <div className="flex flex-col items-center p-4 bg-muted rounded-lg">
-                    <Bath className="h-6 w-6 mb-2 text-primary" />
-                    <span className="text-sm text-muted-foreground font-nunito">Bathrooms</span>
-                    <span className="font-bold font-montserrat">{property.bathrooms}</span>
+                  <div className="bg-card p-4 rounded-lg shadow-md">
+                    <div className="flex items-center text-muted-foreground mb-2">
+                      <Bath className="h-5 w-5 mr-2" />
+                      <span className="text-sm">Bathrooms</span>
+                    </div>
+                    <p className="text-2xl font-bold text-foreground font-montserrat">{property.bathrooms}</p>
                   </div>
-                  <div className="flex flex-col items-center p-4 bg-muted rounded-lg">
-                    <Maximize className="h-6 w-6 mb-2 text-primary" />
-                    <span className="text-sm text-muted-foreground font-nunito">Size</span>
-                    <span className="font-bold font-montserrat">{property.size} sqft</span>
+                  <div className="bg-card p-4 rounded-lg shadow-md">
+                    <div className="flex items-center text-muted-foreground mb-2">
+                      <Maximize className="h-5 w-5 mr-2" />
+                      <span className="text-sm">Size</span>
+                    </div>
+                    <p className="text-2xl font-bold text-foreground font-montserrat">{property.size} sqft</p>
                   </div>
-                  <div className="flex flex-col items-center p-4 bg-muted rounded-lg">
-                    <MapPin className="h-6 w-6 mb-2 text-primary" />
-                    <span className="text-sm text-muted-foreground font-nunito">Location</span>
-                    <span className="font-bold font-montserrat text-center text-xs">{property.distanceFromCenter}</span>
+                  <div className="bg-card p-4 rounded-lg shadow-md">
+                    <div className="flex items-center text-muted-foreground mb-2">
+                      <Clock className="h-5 w-5 mr-2" />
+                      <span className="text-sm">To Transit</span>
+                    </div>
+                    <p className="text-2xl font-bold text-foreground font-montserrat">{property.walkToTransit} min</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                  <div className="bg-card p-6 rounded-lg shadow-md">
+                    <h3 className="text-lg font-bold text-foreground mb-4 font-montserrat flex items-center">
+                      <MapPinIcon className="h-5 w-5 mr-2 text-primary" />
+                      Location Details
+                    </h3>
+                    <div className="space-y-3">
+                      <div>
+                        <p className="text-sm text-muted-foreground mb-1">Address</p>
+                        <p className="text-foreground font-nunito">{property.mapLocation.address}</p>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <p className="text-sm text-muted-foreground mb-1">To Main Road</p>
+                          <p className="text-lg font-bold text-foreground font-montserrat">
+                            {property.walkToMainRoad} min
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-muted-foreground mb-1">To Transit</p>
+                          <p className="text-lg font-bold text-foreground font-montserrat">
+                            {property.walkToTransit} min
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-card p-6 rounded-lg shadow-md">
+                    <h3 className="text-lg font-bold text-foreground mb-4 font-montserrat flex items-center">
+                      <Home className="h-5 w-5 mr-2 text-primary" />
+                      Special Features
+                    </h3>
+                    <div className="space-y-2">
+                      {property.hasBalcony && (
+                        <div className="flex items-center text-foreground">
+                          <CheckCircle2 className="h-5 w-5 mr-2 text-green-500" />
+                          <span className="font-nunito">Balcony</span>
+                        </div>
+                      )}
+                      {property.features.map((feature) => (
+                        <div key={feature} className="flex items-center text-foreground">
+                          <CheckCircle2 className="h-5 w-5 mr-2 text-green-500" />
+                          <span className="font-nunito">{feature}</span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 </div>
 

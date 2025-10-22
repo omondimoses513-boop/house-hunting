@@ -598,7 +598,7 @@ export default function LandlordRegister() {
                 </Button>
 
                 {currentStep < steps.length ? (
-                  <Button onClick={handleNext} className="tyrent-gradient text-white font-nunito">
+                  <Button onClick={handleNext} className="font-nunito">
                     Next
                     <ArrowRight className="h-4 w-4 ml-2" />
                   </Button>

@@ -1,4 +1,5 @@
 "use client"
+
 import { motion } from "framer-motion"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
@@ -6,7 +7,20 @@ import { sampleProperties } from "@/data/SampleProperties"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { ArrowRight, MapPin, Star, BedDouble, Bath, Maximize, CheckCircle2, Heart, Video, Calendar } from "lucide-react"
+import {
+  ArrowRight,
+  MapPin,
+  Star,
+  BedDouble,
+  Bath,
+  Maximize,
+  CheckCircle2,
+  Heart,
+  Video,
+  Calendar,
+  Clock,
+  Home,
+} from "lucide-react"
 import { useState } from "react"
 import { PageRoutes } from "@/constants/page-routes"
 
@@ -141,14 +155,31 @@ export default function FeaturedProperties() {
                       </div>
                     </div>
 
+                    <div className="grid grid-cols-2 gap-2 mb-3 p-2 bg-muted/50 rounded-md shadow-sm">
+                      <div className="flex items-center text-xs text-muted-foreground">
+                        <Clock className="h-3 w-3 mr-1" />
+                        <span>{property.walkToTransit} min to transit</span>
+                      </div>
+                      <div className="flex items-center text-xs text-muted-foreground">
+                        <MapPin className="h-3 w-3 mr-1" />
+                        <span>{property.walkToMainRoad} min to road</span>
+                      </div>
+                      {property.hasBalcony && (
+                        <div className="flex items-center text-xs text-primary col-span-2">
+                          <Home className="h-3 w-3 mr-1" />
+                          <span className="font-semibold">Has Balcony</span>
+                        </div>
+                      )}
+                    </div>
+
                     <div className="flex items-center flex-wrap gap-2 mb-3">
                       {property.amenities.slice(0, 3).map((amenity) => (
-                        <Badge key={amenity} variant="outline" className="text-xs font-nunito">
+                        <Badge key={amenity} variant="outline" className="text-xs font-nunito shadow-sm">
                           {amenity}
                         </Badge>
                       ))}
                       {property.amenities.length > 3 && (
-                        <Badge variant="outline" className="text-xs font-nunito">
+                        <Badge variant="outline" className="text-xs font-nunito shadow-sm">
                           +{property.amenities.length - 3} more
                         </Badge>
                       )}
@@ -179,7 +210,7 @@ export default function FeaturedProperties() {
                         }}
                         variant="outline"
                         size="sm"
-                        className="flex-1 font-nunito"
+                        className="flex-1 font-nunito shadow-sm hover:shadow-md"
                       >
                         <Video className="h-4 w-4 mr-1" />
                         Tour
@@ -190,7 +221,7 @@ export default function FeaturedProperties() {
                           handleBook(property.id)
                         }}
                         size="sm"
-                        className="flex-1 tyrent-gradient text-white font-nunito"
+                        className="flex-1  font-nunito shadow-sm hover:shadow-md"
                       >
                         <Calendar className="h-4 w-4 mr-1" />
                         Book

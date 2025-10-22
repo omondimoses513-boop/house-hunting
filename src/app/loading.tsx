@@ -5,3 +5,8 @@ export default function Loading() {
         </section>
     )
 }
+
+export const metadata = {
+  title: 'Tyrent - Your Digital House Hunting Partner',
+  description: 'Find and book your perfect apartment with verified listings, virtual tours, and secure payments.',
+}
