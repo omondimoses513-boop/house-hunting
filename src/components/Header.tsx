@@ -62,7 +62,9 @@ export default function Header() {
             <div className="tyrent-gradient w-8 h-8 rounded-lg flex items-center justify-center shadow-lg">
               <Building2 className="h-5 w-5 text-white" />
             </div>
-            <span className="text-xl font-bold text-foreground transition-colors duration-300 font-montserrat">
+            <span className={`text-xl font-bold transition-colors duration-300 font-montserrat ${
+              scrolled ? "text-foreground" : "text-white"
+            }`}>
               Tyrent
             </span>
           </Link>
@@ -72,7 +74,9 @@ export default function Header() {
             <Link href="/">
               <Button
                 variant="ghost"
-                className="text-sm font-medium rounded-full px-4 text-foreground hover:bg-accent transition-colors duration-300 font-nunito"
+                className={`text-sm font-medium rounded-full px-4 transition-colors duration-300 font-nunito ${
+                  scrolled ? "text-foreground hover:bg-accent" : "text-white hover:bg-white/10"
+                }`}
               >
                 Home
               </Button>
@@ -80,7 +84,9 @@ export default function Header() {
             <Link href="/properties">
               <Button
                 variant="ghost"
-                className="text-sm font-medium rounded-full px-4 text-foreground hover:bg-accent transition-colors duration-300 font-nunito"
+                className={`text-sm font-medium rounded-full px-4 transition-colors duration-300 font-nunito ${
+                  scrolled ? "text-foreground hover:bg-accent" : "text-white hover:bg-white/10"
+                }`}
               >
                 Properties
               </Button>
@@ -88,7 +94,9 @@ export default function Header() {
             <Link href="/landlord/register">
               <Button
                 variant="ghost"
-                className="text-sm font-medium rounded-full px-4 text-foreground hover:bg-accent transition-colors duration-300 font-nunito"
+                className={`text-sm font-medium rounded-full px-4 transition-colors duration-300 font-nunito ${
+                  scrolled ? "text-foreground hover:bg-accent" : "text-white hover:bg-white/10"
+                }`}
               >
                 Become a Landlord
               </Button>
@@ -96,7 +104,9 @@ export default function Header() {
             <Link href="/tenant/dashboard">
               <Button
                 variant="ghost"
-                className="text-sm font-medium rounded-full px-4 text-foreground hover:bg-accent transition-colors duration-300 font-nunito"
+                className={`text-sm font-medium rounded-full px-4 transition-colors duration-300 font-nunito ${
+                  scrolled ? "text-foreground hover:bg-accent" : "text-white hover:bg-white/10"
+                }`}
               >
                 My Bookings
               </Button>
@@ -111,20 +121,28 @@ export default function Header() {
                 variant="ghost"
                 size="icon"
                 onClick={toggleTheme}
-                className="rounded-full hover:bg-accent transition-colors duration-300"
+                className={`rounded-full transition-colors duration-300 ${
+                  scrolled ? "hover:bg-accent" : "hover:bg-white/10"
+                }`}
                 title={`Switch to ${theme === "light" ? "dark" : "light"} mode`}
               >
                 {theme === "light" ? (
-                  <Moon className="h-5 w-5 text-muted-foreground" />
+                  <Moon className={`h-5 w-5 ${scrolled ? "text-muted-foreground" : "text-white"}`} />
                 ) : (
-                  <Sun className="h-5 w-5 text-muted-foreground" />
+                  <Sun className={`h-5 w-5 ${scrolled ? "text-muted-foreground" : "text-white"}`} />
                 )}
               </Button>
             )}
 
             {/* Notifications */}
-            <Button variant="ghost" size="icon" className="rounded-full hover:bg-accent transition-colors duration-300">
-              <Bell className="h-5 w-5 text-muted-foreground" />
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className={`rounded-full transition-colors duration-300 ${
+                scrolled ? "hover:bg-accent" : "hover:bg-white/10"
+              }`}
+            >
+              <Bell className={`h-5 w-5 ${scrolled ? "text-muted-foreground" : "text-white"}`} />
             </Button>
 
             {/* Favorites */}
@@ -132,19 +150,25 @@ export default function Header() {
               <Button
                 variant="ghost"
                 size="icon"
-                className="rounded-full hover:bg-accent transition-colors duration-300"
+                className={`rounded-full transition-colors duration-300 ${
+                  scrolled ? "hover:bg-accent" : "hover:bg-white/10"
+                }`}
               >
-                <Heart className="h-5 w-5 text-muted-foreground" />
+                <Heart className={`h-5 w-5 ${scrolled ? "text-muted-foreground" : "text-white"}`} />
               </Button>
             </Link>
 
             {/* User Menu */}
-            <div className="flex items-center space-x-2 rounded-full p-1 border border-border bg-background hover:shadow-md transition-all duration-300 cursor-pointer">
-              <Button variant="ghost" size="icon" className="rounded-full h-8 w-8">
-                <Menu className="h-4 w-4 text-muted-foreground" />
+            <div className={`flex items-center space-x-2 rounded-full p-1 border hover:shadow-md transition-all duration-300 cursor-pointer ${
+              scrolled 
+                ? "border-border bg-background" 
+                : "border-white/30 bg-white/10 backdrop-blur-sm"
+            }`}>
+              <Button variant="ghost" size="icon" className="rounded-full h-8 w-8 hover:bg-transparent">
+                <Menu className={`h-4 w-4 ${scrolled ? "text-muted-foreground" : "text-white"}`} />
               </Button>
-              <Button variant="ghost" size="icon" className="rounded-full h-8 w-8">
-                <User className="h-4 w-4 text-muted-foreground" />
+              <Button variant="ghost" size="icon" className="rounded-full h-8 w-8 hover:bg-transparent">
+                <User className={`h-4 w-4 ${scrolled ? "text-muted-foreground" : "text-white"}`} />
               </Button>
             </div>
           </div>
@@ -154,9 +178,15 @@ export default function Header() {
             variant="ghost"
             size="icon"
             onClick={() => setIsMenuOpen(!isMenuOpen)}
-            className="md:hidden rounded-full z-50 hover:bg-accent"
+            className={`md:hidden rounded-full z-50 ${
+              scrolled ? "hover:bg-accent" : "hover:bg-white/10"
+            }`}
           >
-            {isMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+            {isMenuOpen ? (
+              <X className={`h-6 w-6 ${scrolled ? "" : "text-white"}`} />
+            ) : (
+              <Menu className={`h-6 w-6 ${scrolled ? "" : "text-white"}`} />
+            )}
           </Button>
         </div>
       </div>
