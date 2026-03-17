@@ -28,6 +28,7 @@ import {
   Shield,
   Video,
 } from "lucide-react"
+import { getFavorites, setFavorites as persistFavorites, toggleFavorite as toggleFav } from "@/lib/user-preferences"
 
 export default function PropertiesListing() {
   const router = useRouter()
@@ -63,6 +64,7 @@ export default function PropertiesListing() {
 
   const toggleFavorite = (id: string) => {
     setFavorites((prev) => (prev.includes(id) ? prev.filter((f) => f !== id) : [...prev, id]))
+    toggleFav(id)
   }
 
   const toggleAmenity = (amenity: string) => {
@@ -118,6 +120,14 @@ export default function PropertiesListing() {
       }
     }
   }, [hasMore, isLoading])
+
+  useEffect(() => {
+    setFavorites(getFavorites())
+  }, [])
+
+  useEffect(() => {
+    persistFavorites(favorites)
+  }, [favorites])
 
   return (
     <div className="mt-28 bg-background">
@@ -500,9 +510,11 @@ export default function PropertiesListing() {
                   >
                     Book
                   </Button>
-                  <Button variant="outline" className="flex-1 text-sm font-nunito bg-transparent" size="sm">
-                    <Video className="h-4 w-4 mr-1" />
-                    Tour
+                  <Button asChild variant="outline" className="flex-1 text-sm font-nunito bg-transparent" size="sm">
+                    <Link href={`/virtual-tour/${property.id}`}>
+                      <Video className="h-4 w-4 mr-1" />
+                      Tour
+                    </Link>
                   </Button>
                 </div>
               </Card>

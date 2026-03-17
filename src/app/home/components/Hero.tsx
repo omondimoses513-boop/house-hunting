@@ -3,6 +3,8 @@
 import React, { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Button } from '@/components/ui/button'
+import Link from "next/link"
+import { PageRoutes } from "@/constants/page-routes"
 import { 
   Search, 
   MapPin, 
@@ -256,9 +258,12 @@ export default function Hero() {
                 style={{
                   boxShadow: '0 10px 30px rgba(var(--primary-rgb), 0.4)',
                 }}
+                asChild
               >
-                <Search className="mr-2 h-5 w-5" />
-                Start Searching
+                <Link href={PageRoutes.PROPERTIES}>
+                  <Search className="mr-2 h-5 w-5" />
+                  Start Searching
+                </Link>
               </Button>
             </motion.div>
             <motion.div
@@ -270,9 +275,12 @@ export default function Hero() {
                 size="lg" 
                 variant="outline" 
                 className="border-2 border-white text-white hover:bg-white hover:text-foreground font-semibold px-8 py-6 text-base rounded-xl backdrop-blur-sm bg-white/10 min-w-[200px] transition-all duration-300"
+                asChild
               >
-                <Home className="mr-2 h-5 w-5" />
-                List Your Property
+                <Link href={PageRoutes.LANDLORD_CREATE_PROPERTY}>
+                  <Home className="mr-2 h-5 w-5" />
+                  List Your Property
+                </Link>
               </Button>
             </motion.div>
           </motion.div>

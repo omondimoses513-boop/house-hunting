@@ -59,6 +59,12 @@
   --radius: 0.65rem;
   --background: oklch(1 0 0);
   --foreground: oklch(0.141 0.005 285.823);
+  /* Tyrent Brand Colors (HSL components) */
+  --tyrent-blue: 217 91% 60%;
+  --tyrent-blue-light: 213 94% 68%;
+  --tyrent-blue-dark: 221 83% 53%;
+  --tyrent-gray-dark: 215 25% 27%;
+  --tyrent-gray-light: 220 14% 96%;
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.141 0.005 285.823);
   --popover: oklch(1 0 0);
@@ -93,6 +99,12 @@
 .dark {
   --background: oklch(0.141 0.005 285.823);
   --foreground: oklch(0.985 0 0);
+  /* Keep brand colors consistent in dark mode */
+  --tyrent-blue: 217 91% 60%;
+  --tyrent-blue-light: 213 94% 68%;
+  --tyrent-blue-dark: 221 83% 53%;
+  --tyrent-gray-dark: 215 25% 27%;
+  --tyrent-gray-light: 220 14% 96%;
   --card: oklch(0.21 0.006 285.885);
   --card-foreground: oklch(0.985 0 0);
   --popover: oklch(0.21 0.006 285.885);

@@ -1,7 +1,9 @@
 "use client"
 
-import { useState } from "react"
+import Link from "next/link"
+import { useEffect, useMemo, useState } from "react"
 import { motion } from "framer-motion"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -21,87 +23,93 @@ import {
   ArrowUpRight,
   MapPin,
 } from "lucide-react"
+import { PageRoutes } from "@/constants/page-routes"
+import {
+  getLandlordBookings,
+  getLandlordProfile,
+  getLandlordProperties,
+  seedLandlordDemoDataIfEmpty,
+  type LandlordBooking,
+  type LandlordProperty,
+  updateBookingStatus,
+} from "@/lib/landlord-storage"
 
 export default function LandlordDashboard() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+
   const [selectedPeriod, setSelectedPeriod] = useState("month")
+  const [properties, setProperties] = useState<LandlordProperty[]>([])
+  const [bookings, setBookings] = useState<LandlordBooking[]>([])
+  const [selectedPropertyId, setSelectedPropertyId] = useState<string | null>(null)
+  const [banner, setBanner] = useState<{ title: string; message: string } | null>(null)
 
-  // Mock data
-  const stats = {
-    totalProperties: 5,
-    totalUnits: 24,
-    occupiedUnits: 18,
-    vacantUnits: 6,
-    monthlyRevenue: 1170000,
-    revenueChange: 12.5,
-    pendingBookings: 3,
-    activeLeases: 18,
-  }
+  const profile = useMemo(() => getLandlordProfile(), [])
 
-  const properties = [
-    {
-      id: "1",
-      name: "Sunrise Apartments",
-      location: "Kilimani, Nairobi",
-      totalUnits: 12,
-      occupiedUnits: 10,
-      vacantUnits: 2,
-      monthlyRevenue: 650000,
-      image: "/modern-apartment-living-room.png",
-    },
-    {
-      id: "2",
-      name: "Westlands Heights",
-      location: "Westlands, Nairobi",
-      totalUnits: 8,
-      occupiedUnits: 6,
-      vacantUnits: 2,
-      monthlyRevenue: 480000,
-      image: "/luxury-penthouse-living-room.png",
-    },
-    {
-      id: "3",
-      name: "Garden View Estate",
-      location: "Lavington, Nairobi",
-      totalUnits: 4,
-      occupiedUnits: 2,
-      vacantUnits: 2,
-      monthlyRevenue: 220000,
-      image: "/spacious-one-bedroom-apartment.jpg",
-    },
-  ]
+  useEffect(() => {
+    seedLandlordDemoDataIfEmpty()
+    const nextProperties = getLandlordProperties()
+    const nextBookings = getLandlordBookings()
+    setProperties(nextProperties)
+    setBookings(nextBookings)
+    setSelectedPropertyId(nextProperties[0]?.id ?? null)
+  }, [])
 
-  const bookings = [
-    {
-      id: "1",
-      tenant: "Jane Wanjiru",
-      property: "Sunrise Apartments",
-      unit: "A101",
-      moveInDate: "2025-03-01",
-      amount: 200000,
-      status: "pending",
-      submittedDate: "2025-02-15",
-    },
-    {
-      id: "2",
-      tenant: "Peter Omondi",
-      property: "Westlands Heights",
-      unit: "B205",
-      moveInDate: "2025-03-15",
-      amount: 180000,
-      status: "pending",
-      submittedDate: "2025-02-16",
-    },
-    {
-      id: "3",
-      tenant: "Mary Njeri",
-      property: "Garden View Estate",
-      unit: "C102",
-      moveInDate: "2025-02-28",
-      amount: 165000,
-      status: "approved",
-      submittedDate: "2025-02-10",
-    },
-  ]
+  useEffect(() => {
+    const created = searchParams.get("created")
+    const registered = searchParams.get("registered")
+
+    if (created === "1") {
+      setBanner({ title: "Listing published", message: "Your property listing has been saved and is now visible here." })
+    } else if (registered === "1") {
+      setBanner({ title: "Application submitted", message: "Thanks! Your landlord application was saved successfully." })
+    } else {
+      setBanner(null)
+    }
+  }, [searchParams])
+
+  const computedProperties = useMemo(() => {
+    return properties.map((p) => {
+      const totalUnits = p.units.length
+      const occupiedUnits = p.units.filter((u) => u.status === "occupied").length
+      const vacantUnits = totalUnits - occupiedUnits
+      const monthlyRevenue = p.units.reduce((sum, u) => sum + (u.status === "occupied" ? u.rent : 0), 0)
+      const firstImage = (p.imageUrls && p.imageUrls[0]) || p.imageNames[0] || ""
+      const image = firstImage
+        ? firstImage.startsWith("http") || firstImage.startsWith("/")
+          ? firstImage
+          : `/${firstImage}`
+        : "/placeholder.svg"
+      const location = `${p.area}, ${p.county}`
+      return { ...p, totalUnits, occupiedUnits, vacantUnits, monthlyRevenue, image, location }
+    })
+  }, [properties])
+
+  const stats = useMemo(() => {
+    const totalProperties = properties.length
+    const allUnits = properties.flatMap((p) => p.units)
+    const totalUnits = allUnits.length
+    const occupiedUnits = allUnits.filter((u) => u.status === "occupied").length
+    const vacantUnits = totalUnits - occupiedUnits
+    const monthlyRevenue = allUnits.reduce((sum, u) => sum + (u.status === "occupied" ? u.rent : 0), 0)
+    const pendingBookings = bookings.filter((b) => b.status === "pending").length
+
+    return {
+      totalProperties,
+      totalUnits,
+      occupiedUnits,
+      vacantUnits,
+      monthlyRevenue,
+      revenueChange: 12.5,
+      pendingBookings,
+      activeLeases: occupiedUnits,
+    }
+  }, [properties, bookings])
+
+  const selectedProperty = useMemo(
+    () => properties.find((p) => p.id === selectedPropertyId) ?? null,
+    [properties, selectedPropertyId],
+  )
 
   const recentActivity = [
     { type: "booking", message: "New booking request from Jane Wanjiru", time: "2 hours ago" },
@@ -118,13 +126,45 @@ export default function LandlordDashboard() {
           <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-8">
             <div>
               <h1 className="text-3xl font-bold text-foreground mb-2 font-montserrat">Landlord Dashboard</h1>
-              <p className="text-muted-foreground font-nunito">Manage your properties and track performance</p>
+              <p className="text-muted-foreground font-nunito">
+                {profile?.fullName ? `Welcome back, ${profile.fullName}. ` : ""}
+                Manage your properties and track performance
+              </p>
             </div>
-            <Button className="mt-4 md:mt-0 tyrent-gradient text-white font-nunito">
-              <Plus className="h-4 w-4 mr-2" />
-              Add New Property
+            <Button asChild className="mt-4 md:mt-0 tyrent-gradient text-white font-nunito">
+              <Link href={PageRoutes.LANDLORD_CREATE_PROPERTY}>
+                <Plus className="h-4 w-4 mr-2" />
+                Add New Property
+              </Link>
             </Button>
           </div>
+
+          {banner && (
+            <div className="mb-8 rounded-xl border border-green-200 dark:border-green-900 bg-green-50 dark:bg-green-950/20 p-4">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex items-start gap-3">
+                  <div className="mt-0.5">
+                    <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />
+                  </div>
+                  <div>
+                    <p className="font-semibold text-green-900 dark:text-green-100 font-montserrat">{banner.title}</p>
+                    <p className="text-sm text-green-800 dark:text-green-200 font-nunito">{banner.message}</p>
+                  </div>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="font-nunito"
+                  onClick={() => {
+                    setBanner(null)
+                    router.replace(PageRoutes.LANDLORD_DASHBOARD)
+                  }}
+                >
+                  Dismiss
+                </Button>
+              </div>
+            </div>
+          )}
 
           {/* Stats Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
@@ -221,7 +261,7 @@ export default function LandlordDashboard() {
             {/* Properties Tab */}
             <TabsContent value="properties" className="space-y-6">
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {properties.map((property, index) => (
+                {computedProperties.map((property, index) => (
                   <motion.div
                     key={property.id}
                     initial={{ opacity: 0, y: 20 }}
@@ -286,13 +326,22 @@ export default function LandlordDashboard() {
                               </p>
                             </div>
                             <div className="flex gap-2">
-                              <Button variant="outline" size="sm" className="font-nunito bg-transparent">
-                                <Eye className="h-4 w-4 mr-1" />
-                                View
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="font-nunito bg-transparent"
+                                asChild
+                              >
+                                <Link href={`/landlord/properties/${property.id}`}>
+                                  <Eye className="h-4 w-4 mr-1" />
+                                  View
+                                </Link>
                               </Button>
-                              <Button variant="outline" size="sm" className="font-nunito bg-transparent">
-                                <Edit className="h-4 w-4 mr-1" />
-                                Edit
+                              <Button asChild variant="outline" size="sm" className="font-nunito bg-transparent">
+                                <Link href={`${PageRoutes.LANDLORD_CREATE_PROPERTY}?edit=${property.id}`}>
+                                  <Edit className="h-4 w-4 mr-1" />
+                                  Edit
+                                </Link>
                               </Button>
                             </div>
                           </div>
@@ -302,6 +351,48 @@ export default function LandlordDashboard() {
                   </motion.div>
                 ))}
               </div>
+
+              {selectedProperty && (
+                <Card>
+                  <CardContent className="p-6">
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <h3 className="text-xl font-bold text-foreground font-montserrat">{selectedProperty.name}</h3>
+                        <p className="text-sm text-muted-foreground font-nunito">
+                          {selectedProperty.area}, {selectedProperty.county} • {selectedProperty.units.length} units
+                        </p>
+                      </div>
+                      <Button asChild variant="outline" className="bg-transparent font-nunito">
+                        <Link href={`${PageRoutes.LANDLORD_CREATE_PROPERTY}?edit=${selectedProperty.id}`}>Edit Listing</Link>
+                      </Button>
+                    </div>
+
+                    <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="rounded-lg border border-border p-4">
+                        <p className="text-xs text-muted-foreground font-nunito">Occupied</p>
+                        <p className="text-2xl font-bold text-foreground font-montserrat">
+                          {selectedProperty.units.filter((u) => u.status === "occupied").length}
+                        </p>
+                      </div>
+                      <div className="rounded-lg border border-border p-4">
+                        <p className="text-xs text-muted-foreground font-nunito">Vacant</p>
+                        <p className="text-2xl font-bold text-foreground font-montserrat">
+                          {selectedProperty.units.filter((u) => u.status === "vacant").length}
+                        </p>
+                      </div>
+                      <div className="rounded-lg border border-border p-4">
+                        <p className="text-xs text-muted-foreground font-nunito">Est. Monthly Revenue</p>
+                        <p className="text-2xl font-bold text-foreground font-montserrat">
+                          KES{" "}
+                          {selectedProperty.units
+                            .reduce((sum, u) => sum + (u.status === "occupied" ? u.rent : 0), 0)
+                            .toLocaleString()}
+                        </p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
             </TabsContent>
 
             {/* Bookings Tab */}
@@ -341,7 +432,7 @@ export default function LandlordDashboard() {
                             </Badge>
                           </div>
                           <p className="text-sm text-muted-foreground font-nunito mb-1">
-                            {booking.property} - Unit {booking.unit}
+                            {booking.propertyName} - Unit {booking.unit}
                           </p>
                           <div className="flex flex-wrap gap-4 text-xs text-muted-foreground font-nunito">
                             <span>Move-in: {booking.moveInDate}</span>
@@ -352,7 +443,11 @@ export default function LandlordDashboard() {
 
                         {booking.status === "pending" && (
                           <div className="flex gap-2">
-                            <Button size="sm" className="tyrent-gradient text-white font-nunito">
+                            <Button
+                              size="sm"
+                              className="tyrent-gradient text-white font-nunito"
+                              onClick={() => setBookings(updateBookingStatus(booking.id, "approved"))}
+                            >
                               <CheckCircle2 className="h-4 w-4 mr-1" />
                               Approve
                             </Button>
@@ -360,7 +455,8 @@ export default function LandlordDashboard() {
                               variant="outline"
                               size="sm"
                               className="text-red-600 border-red-600 font-nunito bg-transparent"
-                            >
+                              onClick={() => setBookings(updateBookingStatus(booking.id, "declined"))}
+                                  >
                               <XCircle className="h-4 w-4 mr-1" />
                               Decline
                             </Button>

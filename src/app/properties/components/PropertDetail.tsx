@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { motion } from "framer-motion"
 import Link from "next/link"
 import { useParams, useRouter } from "next/navigation"
@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
 import { getPropertyBySlug, getSimilarProperties } from "@/data/SampleProperties"
 import { PageRoutes } from "@/constants/page-routes"
+import { getFavorites, submitReport, toggleFavorite } from "@/lib/user-preferences"
 import {
   Star,
   Heart,
@@ -44,6 +45,16 @@ export default function PropertyDetail() {
   const [checkIn, setCheckIn] = useState("")
   const [checkOut, setCheckOut] = useState("")
   const [guests, setGuests] = useState(1)
+  const [banner, setBanner] = useState<{ title: string; message: string } | null>(null)
+
+  const [contactOpen, setContactOpen] = useState(false)
+  const [contactSubject, setContactSubject] = useState("")
+  const [contactMessage, setContactMessage] = useState("")
+
+  const [reportOpen, setReportOpen] = useState(false)
+  const [reportReason, setReportReason] = useState("Scam / suspicious listing")
+  const [reportDetails, setReportDetails] = useState("")
+  const [reportEmail, setReportEmail] = useState("")
 
   if (!property) {
     return (
@@ -59,6 +70,19 @@ export default function PropertyDetail() {
     )
   }
 
+  useEffect(() => {
+    setIsFavorite(getFavorites().includes(property.id))
+  }, [property.id])
+
+  const whatsappPhone = useMemo(() => {
+    const raw = property.landlord.phone || ""
+    const digits = raw.replace(/[^\d]/g, "")
+    if (digits.startsWith("0")) return `254${digits.slice(1)}`
+    if (digits.startsWith("254")) return digits
+    if (digits.startsWith("7") || digits.startsWith("1")) return `254${digits}`
+    return digits
+  }, [property.landlord.phone])
+
   const nextImage = () => {
     setCurrentImageIndex((prev) => (prev + 1) % property.images.length)
   }
@@ -69,6 +93,66 @@ export default function PropertyDetail() {
 
   const handleBooking = () => {
     router.push(`${PageRoutes.BOOKING}/${property.id}`)
+  }
+
+  const handleShare = async () => {
+    const url = typeof window !== "undefined" ? window.location.href : ""
+    try {
+      const nav: Navigator | undefined = typeof window !== "undefined" ? window.navigator : undefined
+      const share = nav ? (nav as unknown as { share?: (data: { title: string; text: string; url: string }) => Promise<void> }).share : undefined
+      if (share) {
+        await share({
+          title: property.title,
+          text: "Check out this listing on Tyrent",
+          url,
+        })
+        setBanner({ title: "Shared", message: "Thanks for sharing this listing." })
+        return
+      }
+      const clipboard = nav ? (nav as unknown as { clipboard?: { writeText: (text: string) => Promise<void> } }).clipboard : undefined
+      if (clipboard?.writeText) {
+        await clipboard.writeText(url)
+        setBanner({ title: "Link copied", message: "Listing link copied to clipboard." })
+        return
+      }
+      setBanner({ title: "Link copied", message: "Listing link copied to clipboard." })
+    } catch {
+      setBanner({ title: "Share failed", message: "Please copy the URL from the address bar." })
+    }
+  }
+
+  const openContact = () => {
+    setContactSubject(`Enquiry: ${property.title}`)
+    setContactMessage("")
+    setContactOpen(true)
+  }
+
+  const sendContact = () => {
+    if (!contactSubject.trim() || !contactMessage.trim()) {
+      setBanner({ title: "Message incomplete", message: "Please add a subject and message." })
+      return
+    }
+    setContactOpen(false)
+    setBanner({ title: "Draft saved", message: "Opening your email app with the message." })
+    const mailto = `mailto:${encodeURIComponent(property.landlord.email)}?subject=${encodeURIComponent(
+      contactSubject.trim(),
+    )}&body=${encodeURIComponent(contactMessage.trim())}`
+    window.location.href = mailto
+  }
+
+  const submitListingReport = () => {
+    if (!reportReason.trim()) return
+    submitReport({
+      propertyId: property.id,
+      propertyTitle: property.title,
+      reason: reportReason,
+      details: reportDetails.trim() || undefined,
+      contactEmail: reportEmail.trim() || undefined,
+    })
+    setReportOpen(false)
+    setReportDetails("")
+    setReportEmail("")
+    setBanner({ title: "Report submitted", message: "Thanks — our team will review this listing." })
   }
 
   return (
@@ -115,6 +199,20 @@ export default function PropertyDetail() {
       </div>
 
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 pb-16">
+        {banner && (
+          <div className="mb-6 rounded-xl border border-border bg-card p-4">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="font-semibold text-foreground font-montserrat">{banner.title}</p>
+                <p className="text-sm text-muted-foreground font-nunito">{banner.message}</p>
+              </div>
+              <Button variant="ghost" size="sm" className="font-nunito" onClick={() => setBanner(null)}>
+                Dismiss
+              </Button>
+            </div>
+          </div>
+        )}
+
         {/* Header */}
         <div className="mb-6">
           <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
@@ -139,11 +237,21 @@ export default function PropertyDetail() {
               </div>
             </div>
             <div className="flex gap-2">
-              <Button variant="outline" size="icon" onClick={() => setIsFavorite(!isFavorite)}>
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => {
+                  setIsFavorite((prev) => !prev)
+                  toggleFavorite(property.id)
+                }}
+              >
                 <Heart className={`h-5 w-5 ${isFavorite ? "fill-red-500 text-red-500" : ""}`} />
               </Button>
-              <Button variant="outline" size="icon">
+              <Button variant="outline" size="icon" onClick={handleShare}>
                 <Share2 className="h-5 w-5" />
+              </Button>
+              <Button variant="outline" className="font-nunito bg-transparent" onClick={() => setReportOpen(true)}>
+                Report
               </Button>
             </div>
           </div>
@@ -185,9 +293,11 @@ export default function PropertyDetail() {
             <Button variant="outline" className="font-nunito bg-transparent" onClick={() => setShowAllPhotos(true)}>
               Show all {property.images.length} photos
             </Button>
-            <Button variant="outline" className="font-nunito bg-transparent">
+            <Button asChild variant="outline" className="font-nunito bg-transparent">
+              <Link href={`/virtual-tour/${property.id}`}>
               <Video className="h-4 w-4 mr-2" />
               Virtual Tour
+              </Link>
             </Button>
           </div>
         </div>
@@ -344,18 +454,29 @@ export default function PropertyDetail() {
                     </div>
                     <p className="text-sm text-muted-foreground mb-3 font-nunito">{property.landlord.joinedDate}</p>
                     <div className="flex flex-wrap gap-2">
-                      <Button size="sm" className="tyrent-gradient text-white font-nunito">
+                      <Button size="sm" className="tyrent-gradient text-white font-nunito" onClick={openContact}>
                         <MessageCircle className="h-4 w-4 mr-2" />
                         Message
                       </Button>
-                      <Button size="sm" variant="outline" className="font-nunito bg-transparent">
+                      <Button asChild size="sm" variant="outline" className="font-nunito bg-transparent">
+                        <a href={`tel:${property.landlord.phone}`}>
                         <Phone className="h-4 w-4 mr-2" />
                         Call
+                        </a>
                       </Button>
-                      <Button size="sm" variant="outline" className="font-nunito bg-transparent">
+                      <Button asChild size="sm" variant="outline" className="font-nunito bg-transparent">
+                        <a href={`mailto:${property.landlord.email}`}>
                         <Mail className="h-4 w-4 mr-2" />
                         Email
+                        </a>
                       </Button>
+                      {whatsappPhone && (
+                        <Button asChild size="sm" variant="outline" className="font-nunito bg-transparent">
+                          <a href={`https://wa.me/${whatsappPhone}`} target="_blank" rel="noreferrer">
+                            WhatsApp
+                          </a>
+                        </Button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -466,6 +587,131 @@ export default function PropertyDetail() {
           </div>
         )}
       </div>
+
+      {/* Contact Modal */}
+      {contactOpen && (
+        <>
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40" onClick={() => setContactOpen(false)} />
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <Card className="w-full max-w-lg">
+              <CardContent className="p-6">
+                <div className="flex items-start justify-between gap-4 mb-4">
+                  <div>
+                    <h3 className="text-xl font-bold text-foreground font-montserrat">Message landlord</h3>
+                    <p className="text-sm text-muted-foreground font-nunito">{property.landlord.email}</p>
+                  </div>
+                  <Button variant="ghost" size="sm" className="font-nunito" onClick={() => setContactOpen(false)}>
+                    Close
+                  </Button>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-foreground mb-2 font-montserrat">Subject</label>
+                    <input
+                      value={contactSubject}
+                      onChange={(e) => setContactSubject(e.target.value)}
+                      className="w-full px-4 py-3 border border-input rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-ring font-nunito"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-foreground mb-2 font-montserrat">Message</label>
+                    <textarea
+                      value={contactMessage}
+                      onChange={(e) => setContactMessage(e.target.value)}
+                      rows={5}
+                      className="w-full px-4 py-3 border border-input rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-ring font-nunito resize-none"
+                      placeholder="Ask about availability, viewing times, fees, etc."
+                    />
+                  </div>
+                </div>
+
+                <div className="mt-6 flex items-center justify-between gap-2">
+                  <Button variant="outline" className="bg-transparent font-nunito" onClick={() => setContactOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button className="tyrent-gradient text-white font-nunito" onClick={sendContact}>
+                    Send via Email
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </>
+      )}
+
+      {/* Report Modal */}
+      {reportOpen && (
+        <>
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40" onClick={() => setReportOpen(false)} />
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <Card className="w-full max-w-lg">
+              <CardContent className="p-6">
+                <div className="flex items-start justify-between gap-4 mb-4">
+                  <div>
+                    <h3 className="text-xl font-bold text-foreground font-montserrat">Report listing</h3>
+                    <p className="text-sm text-muted-foreground font-nunito">{property.title}</p>
+                  </div>
+                  <Button variant="ghost" size="sm" className="font-nunito" onClick={() => setReportOpen(false)}>
+                    Close
+                  </Button>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-foreground mb-2 font-montserrat">Reason</label>
+                    <select
+                      value={reportReason}
+                      onChange={(e) => setReportReason(e.target.value)}
+                      className="w-full px-4 py-3 border border-input rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-ring font-nunito"
+                    >
+                      <option>Scam / suspicious listing</option>
+                      <option>Wrong location / misleading</option>
+                      <option>Incorrect price / hidden charges</option>
+                      <option>Duplicate listing</option>
+                      <option>Inappropriate content</option>
+                      <option>Other</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-foreground mb-2 font-montserrat">
+                      Details (optional)
+                    </label>
+                    <textarea
+                      value={reportDetails}
+                      onChange={(e) => setReportDetails(e.target.value)}
+                      rows={4}
+                      className="w-full px-4 py-3 border border-input rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-ring font-nunito resize-none"
+                      placeholder="Add any helpful context..."
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-foreground mb-2 font-montserrat">
+                      Your email (optional)
+                    </label>
+                    <input
+                      type="email"
+                      value={reportEmail}
+                      onChange={(e) => setReportEmail(e.target.value)}
+                      className="w-full px-4 py-3 border border-input rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-ring font-nunito"
+                      placeholder="you@example.com"
+                    />
+                  </div>
+                </div>
+
+                <div className="mt-6 flex items-center justify-between gap-2">
+                  <Button variant="outline" className="bg-transparent font-nunito" onClick={() => setReportOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button className="tyrent-gradient text-white font-nunito" onClick={submitListingReport}>
+                    Submit report
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </>
+      )}
     </div>
   )
 }

@@ -9,6 +9,8 @@ import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { sampleProperties } from "@/data/SampleProperties"
 import { PageRoutes } from "@/constants/page-routes"
+import { addTenantPayment, saveTenantLease, type TenantLease } from "@/lib/tenant-storage"
+import { generateId, saveLandlordBookings, type LandlordBooking } from "@/lib/landlord-storage"
 import {
   Calendar,
   Users,
@@ -63,9 +65,73 @@ export default function BookingCheckout() {
   const serviceFee = 0
   const total = bookingFee
 
+  const normalizePhoneForWhatsapp = (value: string) => {
+    const digits = value.replace(/[^\d]/g, "")
+    if (digits.startsWith("0")) return `254${digits.slice(1)}`
+    if (digits.startsWith("254")) return digits
+    if (digits.startsWith("7") || digits.startsWith("1")) return `254${digits}`
+    return digits
+  }
+
   const handleSubmit = () => {
     if (!moveInDate || !agreedToTerms) return
-    // Handle booking submission
+    // Persist booking locally (frontend-only) until backend is wired.
+    try {
+      const lease: TenantLease = {
+        id: generateId("lease"),
+        propertyId: property.id,
+        property: property.title,
+        unit: "TBD",
+        location: property.location,
+        landlord: {
+          name: property.landlord?.name ?? "Landlord",
+          phone: property.landlord?.phone ?? "",
+          email: (property as any)?.landlord?.email ?? "landlord@example.com",
+          verified: Boolean(property.landlord?.verified),
+        },
+        rent: rent,
+        deposit: rent * 2,
+        leaseStart: moveInDate,
+        leaseEnd: "",
+        nextPaymentDue: "",
+        imageUrl: property.images?.[0],
+      }
+      saveTenantLease(lease)
+
+      addTenantPayment({
+        id: generateId("payment"),
+        date: new Date().toISOString().slice(0, 10),
+        amount: total,
+        status: "paid",
+        method: paymentMethod === "mpesa" ? "M-Pesa" : paymentMethod === "card" ? "Card" : "Bank",
+        reference: `TYR-BOOK-${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
+        note: `Booking fee for ${property.title}`,
+      })
+
+      // Also create a pending booking for the landlord dashboard (if landlord demo store exists).
+      const landlordBooking: LandlordBooking = {
+        id: generateId("booking"),
+        tenant: "Tenant",
+        propertyId: property.id,
+        propertyName: property.title,
+        unit: "TBD",
+        moveInDate,
+        amount: total,
+        status: "pending",
+        submittedDate: new Date().toISOString().slice(0, 10),
+      }
+      const existing = (() => {
+        try {
+          return (typeof window !== "undefined" ? (JSON.parse(localStorage.getItem("tyrent_landlord_bookings_v1") || "[]") as LandlordBooking[]) : [])
+        } catch {
+          return []
+        }
+      })()
+      saveLandlordBookings([landlordBooking, ...existing])
+    } catch {
+      // If persistence fails, still allow navigation to confirmation.
+    }
+
     router.push(PageRoutes.BOOKING_CONFIRMATION)
   }
 
@@ -423,6 +489,16 @@ export default function BookingCheckout() {
                       </div>
                       <p className="text-sm text-foreground font-nunito mb-1">{property.landlord?.name}</p>
                       <p className="text-xs text-muted-foreground font-nunito">{property.landlord?.phone}</p>
+                      {property.landlord?.phone && (
+                        <a
+                          className="mt-2 inline-block text-xs text-primary hover:underline font-nunito"
+                          href={`https://wa.me/${normalizePhoneForWhatsapp(property.landlord.phone)}`}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          WhatsApp landlord
+                        </a>
+                      )}
                     </div>
 
                     {/* Submit Button */}

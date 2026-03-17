@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -21,6 +22,8 @@ import {
   Home,
   AlertCircle,
 } from "lucide-react"
+import { PageRoutes } from "@/constants/page-routes"
+import { saveLandlordProfile, type LandlordProfile } from "@/lib/landlord-storage"
 
 const steps = [
   { id: 1, name: "Personal Info", icon: User },
@@ -30,7 +33,11 @@ const steps = [
 ]
 
 export default function LandlordRegister() {
+  const router = useRouter()
+
   const [currentStep, setCurrentStep] = useState(1)
+  const [submitError, setSubmitError] = useState<string | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const [formData, setFormData] = useState({
     // Personal Info
     fullName: "",
@@ -73,8 +80,65 @@ export default function LandlordRegister() {
   }
 
   const handleSubmit = () => {
-    console.log("Form submitted:", formData)
-    // Handle form submission
+    setSubmitError(null)
+
+    const missingPersonal =
+      !formData.fullName.trim() ||
+      !formData.email.trim() ||
+      !formData.phone.trim() ||
+      !formData.idNumber.trim() ||
+      !formData.address.trim()
+
+    const missingDocs = !formData.idDocument || !formData.proofOfOwnership
+
+    const missingBank =
+      !formData.bankName.trim() || !formData.accountNumber.trim() || !formData.accountName.trim()
+
+    if (missingPersonal) {
+      setCurrentStep(1)
+      setSubmitError("Please complete all required Personal Info fields.")
+      return
+    }
+    if (missingDocs) {
+      setCurrentStep(2)
+      setSubmitError("Please upload your ID/Passport and Proof of Ownership.")
+      return
+    }
+    if (missingBank) {
+      setCurrentStep(3)
+      setSubmitError("Please complete your required Bank Details.")
+      return
+    }
+    if (!formData.agreedToTerms) {
+      setCurrentStep(4)
+      setSubmitError("Please agree to the Terms and Conditions to continue.")
+      return
+    }
+
+    setIsSubmitting(true)
+    try {
+      const profile: LandlordProfile = {
+        fullName: formData.fullName.trim(),
+        email: formData.email.trim(),
+        phone: formData.phone.trim(),
+        idNumber: formData.idNumber.trim(),
+        address: formData.address.trim(),
+        bankName: formData.bankName.trim(),
+        accountNumber: formData.accountNumber.trim(),
+        accountName: formData.accountName.trim(),
+        branchCode: formData.branchCode.trim(),
+        idDocumentName: formData.idDocument?.name ?? "",
+        proofOfOwnershipName: formData.proofOfOwnership?.name ?? "",
+        kraPinName: formData.kraPin?.name ?? "",
+        createdAt: new Date().toISOString(),
+      }
+      saveLandlordProfile(profile)
+      router.push(`${PageRoutes.LANDLORD_DASHBOARD}?registered=1`)
+    } catch (e) {
+      setSubmitError(e instanceof Error ? e.message : "Failed to submit application. Please try again.")
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -608,11 +672,17 @@ export default function LandlordRegister() {
                     disabled={!formData.agreedToTerms}
                     className="tyrent-gradient text-white font-nunito"
                   >
-                    Submit Application
+                    {isSubmitting ? "Submitting..." : "Submit Application"}
                     <CheckCircle2 className="h-4 w-4 ml-2" />
                   </Button>
                 )}
               </div>
+
+              {submitError && (
+                <div className="mt-4 rounded-lg border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/20 p-4">
+                  <p className="text-sm text-red-700 dark:text-red-200 font-nunito">{submitError}</p>
+                </div>
+              )}
             </CardContent>
           </Card>
 

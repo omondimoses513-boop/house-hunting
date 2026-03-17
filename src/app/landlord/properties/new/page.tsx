@@ -1,7 +1,8 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -28,6 +29,13 @@ import {
   Users,
   Trash2,
 } from "lucide-react"
+import { PageRoutes } from "@/constants/page-routes"
+import {
+  generateId,
+  getLandlordPropertyById,
+  type LandlordProperty,
+  upsertLandlordProperty,
+} from "@/lib/landlord-storage"
 
 const steps = [
   { id: 1, name: "Property Info", icon: Building2 },
@@ -62,7 +70,13 @@ interface Unit {
 }
 
 export default function NewPropertyListing() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const editId = searchParams.get("edit")
+
   const [currentStep, setCurrentStep] = useState(1)
+  const [submitError, setSubmitError] = useState<string | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const [formData, setFormData] = useState({
     // Property Info
     propertyName: "",
@@ -84,6 +98,7 @@ export default function NewPropertyListing() {
 
     // Images & Documents
     propertyImages: [] as File[],
+    propertyImageUrls: "" as string,
     leaseAgreement: null as File | null,
 
     // Units
@@ -105,6 +120,55 @@ export default function NewPropertyListing() {
   })
 
   const progress = (currentStep / steps.length) * 100
+
+  useEffect(() => {
+    if (!editId) return
+    const existing = getLandlordPropertyById(editId)
+    if (!existing) return
+
+    setFormData({
+      propertyName: existing.name ?? "",
+      propertyType: existing.propertyType ?? "apartment",
+      description: existing.description ?? "",
+      rules: existing.rules ?? "",
+
+      county: existing.county ?? "Nairobi",
+      area: existing.area ?? "",
+      street: existing.street ?? "",
+      distanceToRoad: existing.distanceToRoad ?? "",
+      distanceToSchool: existing.distanceToSchool ?? "",
+      distanceToMarket: existing.distanceToMarket ?? "",
+
+      selectedAmenities: existing.amenities ?? [],
+      customAmenities: existing.customAmenities ?? "",
+
+      // File objects can't be restored; keep empty and allow re-upload if desired.
+      propertyImages: [],
+      propertyImageUrls: (existing.imageUrls ?? []).join(", "),
+      leaseAgreement: null,
+
+      units: (existing.units ?? []).map((u) => ({
+        id: u.id,
+        unitNumber: u.unitNumber,
+        category: u.category,
+        type: u.type,
+        bedrooms: u.bedrooms,
+        bathrooms: u.bathrooms,
+        size: u.size,
+        rent: u.rent,
+        deposit: u.deposit,
+        status: u.status,
+        images: [],
+      })),
+    })
+    setCurrentStep(1)
+  }, [editId])
+
+  const parsedPropertyImageUrls = (formData.propertyImageUrls || "")
+    .split(/[\n,]/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .filter((s) => /^https?:\/\//i.test(s))
 
   const handleNext = () => {
     if (currentStep < steps.length) {
@@ -187,8 +251,82 @@ export default function NewPropertyListing() {
   }
 
   const handleSubmit = () => {
-    console.log("Property listing submitted:", formData)
-    // Handle form submission
+    setSubmitError(null)
+
+    const missingStep1 = !formData.propertyName.trim() || !formData.description.trim()
+    const missingStep2 = !formData.area.trim() || !formData.street.trim()
+    const missingImages = !editId && formData.propertyImages.length === 0 && parsedPropertyImageUrls.length === 0
+    const missingUnits = formData.units.length === 0
+    const invalidUnits = formData.units.some((u) => !u.unitNumber.trim() || u.rent <= 0 || u.deposit < 0)
+
+    if (missingStep1) {
+      setCurrentStep(1)
+      setSubmitError("Please fill in the required Property Information fields.")
+      return
+    }
+    if (missingStep2) {
+      setCurrentStep(2)
+      setSubmitError("Please fill in the required Location fields (Area and Street).")
+      return
+    }
+    if (missingImages) {
+      setCurrentStep(3)
+      setSubmitError("Please upload at least 1 property image (or paste at least 1 image URL).")
+      return
+    }
+    if (missingUnits || invalidUnits) {
+      setCurrentStep(4)
+      setSubmitError("Please add at least 1 valid unit (Unit Number, Rent and Deposit).")
+      return
+    }
+
+    setIsSubmitting(true)
+    try {
+      const now = new Date().toISOString()
+      const existing = editId ? getLandlordPropertyById(editId) : null
+      const propertyId = existing?.id ?? generateId("property")
+
+      const property: LandlordProperty = {
+        id: propertyId,
+        name: formData.propertyName.trim(),
+        propertyType: formData.propertyType,
+        description: formData.description.trim(),
+        rules: formData.rules.trim(),
+        county: formData.county,
+        area: formData.area.trim(),
+        street: formData.street.trim(),
+        distanceToRoad: formData.distanceToRoad.trim(),
+        distanceToSchool: formData.distanceToSchool.trim(),
+        distanceToMarket: formData.distanceToMarket.trim(),
+        amenities: formData.selectedAmenities,
+        customAmenities: formData.customAmenities.trim(),
+        imageNames: formData.propertyImages.map((f) => f.name),
+        imageUrls: parsedPropertyImageUrls,
+        leaseAgreementName: formData.leaseAgreement?.name ?? "",
+        units: formData.units.map((u) => ({
+          id: u.id || generateId("unit"),
+          unitNumber: u.unitNumber.trim(),
+          category: u.category,
+          type: u.type,
+          bedrooms: u.bedrooms,
+          bathrooms: u.bathrooms,
+          size: u.size,
+          rent: u.rent,
+          deposit: u.deposit,
+          status: u.status,
+          imageNames: (u.images ?? []).map((f) => f.name),
+        })),
+        createdAt: existing?.createdAt ?? now,
+        updatedAt: now,
+      }
+
+      upsertLandlordProperty(property)
+      router.push(`${PageRoutes.LANDLORD_DASHBOARD}?created=1`)
+    } catch (e) {
+      setSubmitError(e instanceof Error ? e.message : "Failed to publish listing. Please try again.")
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -509,6 +647,32 @@ export default function NewPropertyListing() {
                           ))}
                         </div>
                       )}
+
+                      <div className="space-y-2">
+                        <label className="block text-sm font-semibold text-foreground font-montserrat">
+                          Or paste image URLs (comma or newline separated)
+                        </label>
+                        <textarea
+                          placeholder="https://images.unsplash.com/...\nhttps://images.unsplash.com/..."
+                          value={formData.propertyImageUrls}
+                          onChange={(e) => setFormData({ ...formData, propertyImageUrls: e.target.value })}
+                          rows={3}
+                          className="w-full px-4 py-3 border border-input rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-ring font-nunito resize-none"
+                        />
+                        {parsedPropertyImageUrls.length > 0 && (
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            {parsedPropertyImageUrls.slice(0, 8).map((url, index) => (
+                              <div key={url} className="relative group">
+                                <img
+                                  src={url}
+                                  alt={`URL Image ${index + 1}`}
+                                  className="w-full h-32 object-cover rounded-lg"
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     </div>
 
                     {/* Lease Agreement */}
@@ -815,11 +979,17 @@ export default function NewPropertyListing() {
                     disabled={formData.units.length === 0}
                     className="tyrent-gradient text-white font-nunito"
                   >
-                    Publish Listing
+                    {isSubmitting ? "Publishing..." : editId ? "Save Changes" : "Publish Listing"}
                     <CheckCircle2 className="h-4 w-4 ml-2" />
                   </Button>
                 )}
               </div>
+
+              {submitError && (
+                <div className="mt-4 rounded-lg border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/20 p-4">
+                  <p className="text-sm text-red-700 dark:text-red-200 font-nunito">{submitError}</p>
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { motion } from "framer-motion"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -22,102 +22,109 @@ import {
   ArrowUpRight,
   ArrowDownRight,
 } from "lucide-react"
+import {
+  getAdminDisputes,
+  getAdminStats,
+  getAdminUsers,
+  getAdminVerifications,
+  seedAdminDemoDataIfEmpty,
+  type AdminDispute,
+  type AdminStats,
+  type AdminUser,
+  type AdminVerification,
+  updateAdminDispute,
+  updateAdminUser,
+  updateAdminVerification,
+} from "@/lib/admin-storage"
 
 export default function AdminDashboard() {
   const [selectedPeriod, setSelectedPeriod] = useState("month")
+  const [banner, setBanner] = useState<{ title: string; message: string } | null>(null)
 
-  // Mock data
-  const stats = {
-    totalUsers: 1247,
-    totalLandlords: 342,
-    totalTenants: 905,
-    totalProperties: 856,
-    totalUnits: 3421,
-    occupancyRate: 87.5,
-    totalRevenue: 45600000,
-    revenueGrowth: 18.3,
-    pendingVerifications: 23,
-    activeDisputes: 5,
+  const [stats, setStats] = useState<AdminStats | null>(null)
+  const [recentUsers, setRecentUsers] = useState<AdminUser[]>([])
+  const [pendingVerifications, setPendingVerifications] = useState<AdminVerification[]>([])
+  const [disputes, setDisputes] = useState<AdminDispute[]>([])
+
+  const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null)
+  const [selectedVerification, setSelectedVerification] = useState<AdminVerification | null>(null)
+  const [selectedDispute, setSelectedDispute] = useState<AdminDispute | null>(null)
+
+  const [verifyNotes, setVerifyNotes] = useState("")
+  const [rejectReason, setRejectReason] = useState("")
+  const [resolutionText, setResolutionText] = useState("")
+
+  useEffect(() => {
+    seedAdminDemoDataIfEmpty()
+    setStats(getAdminStats())
+    setRecentUsers(getAdminUsers())
+    setPendingVerifications(getAdminVerifications())
+    setDisputes(getAdminDisputes())
+  }, [])
+
+  const derived = useMemo(() => {
+    const pendingCount = pendingVerifications.filter((v) => v.status === "pending" || v.status === "under-review").length
+    const activeDisputes = disputes.filter((d) => d.status !== "resolved").length
+    return { pendingCount, activeDisputes }
+  }, [pendingVerifications, disputes])
+
+  const platformMetrics = useMemo(() => {
+    const bookings = Math.max(1000, Math.round((stats?.totalUsers ?? 1200) * 1.8))
+    const avgBookingValue = 185000
+    const platformFeeRevenue = Math.round(((stats?.totalRevenue ?? 45600000) * 0.26) / 100000) * 100000
+    return [
+      { label: "Total Bookings", value: bookings.toLocaleString(), change: "+12.5%", trend: "up" as const },
+      { label: "Avg. Booking Value", value: `KES ${(avgBookingValue / 1000).toFixed(0)}K`, change: "+8.2%", trend: "up" as const },
+      {
+        label: "Platform Fee Revenue",
+        value: `KES ${(platformFeeRevenue / 1000000).toFixed(1)}M`,
+        change: "+15.3%",
+        trend: "up" as const,
+      },
+      { label: "User Satisfaction", value: "4.7/5.0", change: "+0.2", trend: "up" as const },
+    ]
+  }, [stats])
+
+  const approveUser = (userId: string) => {
+    setRecentUsers(updateAdminUser(userId, { status: "active", verified: true }))
+    setBanner({ title: "User approved", message: "The user is now active and verified." })
   }
 
-  const recentUsers = [
-    {
-      id: "1",
-      name: "Jane Wanjiru",
-      email: "jane@example.com",
-      type: "tenant",
-      status: "active",
-      joinedDate: "2025-02-15",
-      verified: true,
-    },
-    {
-      id: "2",
-      name: "Peter Omondi",
-      email: "peter@example.com",
-      type: "landlord",
-      status: "pending",
-      joinedDate: "2025-02-16",
-      verified: false,
-    },
-    {
-      id: "3",
-      name: "Mary Njeri",
-      email: "mary@example.com",
-      type: "tenant",
-      status: "active",
-      joinedDate: "2025-02-14",
-      verified: true,
-    },
-  ]
+  const suspendUser = (userId: string) => {
+    setRecentUsers(updateAdminUser(userId, { status: "suspended" }))
+    setBanner({ title: "User suspended", message: "The user account has been suspended." })
+  }
 
-  const pendingVerifications = [
-    {
-      id: "1",
-      landlord: "John Kamau",
-      property: "Sunrise Apartments",
-      submittedDate: "2025-02-10",
-      documents: ["ID", "Title Deed", "KRA PIN"],
-      status: "pending",
-    },
-    {
-      id: "2",
-      landlord: "Sarah Wanjiku",
-      property: "Westlands Heights",
-      submittedDate: "2025-02-12",
-      documents: ["ID", "Title Deed"],
-      status: "under-review",
-    },
-  ]
+  const markVerificationReview = (id: string) => {
+    setPendingVerifications(updateAdminVerification(id, { status: "under-review" }))
+    setBanner({ title: "Marked as under review", message: "Verification is now in review state." })
+  }
 
-  const disputes = [
-    {
-      id: "1",
-      tenant: "Jane Wanjiru",
-      landlord: "John Kamau",
-      property: "Sunrise Apartments - A101",
-      issue: "Deposit refund dispute",
-      priority: "high",
-      status: "open",
-      submittedDate: "2025-02-14",
-    },
-    {
-      id: "2",
-      tenant: "Peter Omondi",
-      landlord: "Sarah Wanjiku",
-      property: "Westlands Heights - B205",
-      issue: "Maintenance not addressed",
-      priority: "medium",
-      status: "investigating",
-      submittedDate: "2025-02-15",
-    },
-  ]
+  const approveVerification = (id: string) => {
+    setPendingVerifications(updateAdminVerification(id, { status: "approved", notes: verifyNotes.trim() || undefined }))
+    setVerifyNotes("")
+    setSelectedVerification(null)
+    setBanner({ title: "Verification approved", message: "The landlord verification has been approved." })
+  }
 
-  const platformMetrics = [
-    { label: "Total Bookings", value: "2,341", change: "+12.5%", trend: "up" },
-    { label: "Avg. Booking Value", value: "KES 185K", change: "+8.2%", trend: "up" },
-    { label: "Platform Fee Revenue", value: "KES 11.7M", change: "+15.3%", trend: "up" },
-    { label: "User Satisfaction", value: "4.7/5.0", change: "+0.2", trend: "up" },
-  ]
+  const rejectVerification = (id: string) => {
+    setPendingVerifications(updateAdminVerification(id, { status: "rejected", notes: rejectReason.trim() || undefined }))
+    setRejectReason("")
+    setSelectedVerification(null)
+    setBanner({ title: "Verification rejected", message: "The landlord verification was rejected." })
+  }
+
+  const investigateDispute = (id: string) => {
+    setDisputes(updateAdminDispute(id, { status: "investigating" }))
+    setBanner({ title: "Dispute investigating", message: "Marked dispute as investigating." })
+  }
+
+  const resolveDispute = (id: string) => {
+    setDisputes(updateAdminDispute(id, { status: "resolved", resolution: resolutionText.trim() || undefined }))
+    setResolutionText("")
+    setSelectedDispute(null)
+    setBanner({ title: "Dispute resolved", message: "Marked dispute as resolved." })
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -142,6 +149,20 @@ export default function AdminDashboard() {
             </div>
           </div>
 
+          {banner && (
+            <div className="mb-8 rounded-xl border border-border bg-card p-4">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="font-semibold text-foreground font-montserrat">{banner.title}</p>
+                  <p className="text-sm text-muted-foreground font-nunito">{banner.message}</p>
+                </div>
+                <Button variant="ghost" size="sm" className="font-nunito" onClick={() => setBanner(null)}>
+                  Dismiss
+                </Button>
+              </div>
+            </div>
+          )}
+
           {/* Stats Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
@@ -158,11 +179,11 @@ export default function AdminDashboard() {
                   </div>
                   <p className="text-sm text-muted-foreground mb-1 font-nunito">Total Users</p>
                   <p className="text-3xl font-bold text-foreground font-montserrat">
-                    {stats.totalUsers.toLocaleString()}
+                    {(stats?.totalUsers ?? 0).toLocaleString()}
                   </p>
                   <div className="flex gap-4 mt-2 text-xs text-muted-foreground font-nunito">
-                    <span>{stats.totalLandlords} Landlords</span>
-                    <span>{stats.totalTenants} Tenants</span>
+                    <span>{stats?.totalLandlords ?? 0} Landlords</span>
+                    <span>{stats?.totalTenants ?? 0} Tenants</span>
                   </div>
                 </CardContent>
               </Card>
@@ -182,10 +203,10 @@ export default function AdminDashboard() {
                   </div>
                   <p className="text-sm text-muted-foreground mb-1 font-nunito">Total Properties</p>
                   <p className="text-3xl font-bold text-foreground font-montserrat">
-                    {stats.totalProperties.toLocaleString()}
+                    {(stats?.totalProperties ?? 0).toLocaleString()}
                   </p>
                   <p className="text-xs text-muted-foreground mt-2 font-nunito">
-                    {stats.totalUnits.toLocaleString()} units
+                    {(stats?.totalUnits ?? 0).toLocaleString()} units
                   </p>
                 </CardContent>
               </Card>
@@ -200,12 +221,12 @@ export default function AdminDashboard() {
                     </div>
                     <div className="flex items-center gap-1 text-green-600">
                       <ArrowUpRight className="h-4 w-4" />
-                      <span className="text-sm font-semibold font-nunito">{stats.revenueGrowth}%</span>
+                      <span className="text-sm font-semibold font-nunito">{stats?.revenueGrowth ?? 0}%</span>
                     </div>
                   </div>
                   <p className="text-sm text-muted-foreground mb-1 font-nunito">Platform Revenue</p>
                   <p className="text-3xl font-bold text-foreground font-montserrat">
-                    {(stats.totalRevenue / 1000000).toFixed(1)}M
+                    {(((stats?.totalRevenue ?? 0) as number) / 1000000).toFixed(1)}M
                   </p>
                   <p className="text-xs text-muted-foreground mt-2 font-nunito">KES this month</p>
                 </CardContent>
@@ -219,14 +240,14 @@ export default function AdminDashboard() {
                     <div className="w-12 h-12 rounded-lg bg-orange-500 flex items-center justify-center">
                       <AlertTriangle className="h-6 w-6 text-white" />
                     </div>
-                    {stats.pendingVerifications > 0 && (
-                      <Badge className="bg-orange-500 text-white border-0">{stats.pendingVerifications}</Badge>
+                    {derived.pendingCount > 0 && (
+                      <Badge className="bg-orange-500 text-white border-0">{derived.pendingCount}</Badge>
                     )}
                   </div>
                   <p className="text-sm text-muted-foreground mb-1 font-nunito">Pending Actions</p>
-                  <p className="text-3xl font-bold text-foreground font-montserrat">{stats.pendingVerifications}</p>
+                  <p className="text-3xl font-bold text-foreground font-montserrat">{derived.pendingCount}</p>
                   <p className="text-xs text-muted-foreground mt-2 font-nunito">
-                    {stats.activeDisputes} active disputes
+                    {derived.activeDisputes} active disputes
                   </p>
                 </CardContent>
               </Card>
@@ -319,7 +340,12 @@ export default function AdminDashboard() {
                         </div>
 
                         <div className="flex gap-2">
-                          <Button variant="outline" size="sm" className="font-nunito bg-transparent">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="font-nunito bg-transparent"
+                            onClick={() => setSelectedUser(user)}
+                          >
                             <Eye className="h-4 w-4 mr-1" />
                             View
                           </Button>
@@ -328,6 +354,7 @@ export default function AdminDashboard() {
                               variant="outline"
                               size="sm"
                               className="text-green-600 border-green-600 font-nunito bg-transparent"
+                              onClick={() => approveUser(user.id)}
                             >
                               <CheckCircle2 className="h-4 w-4 mr-1" />
                               Approve
@@ -337,6 +364,7 @@ export default function AdminDashboard() {
                             variant="outline"
                             size="sm"
                             className="text-red-600 border-red-600 font-nunito bg-transparent"
+                            onClick={() => suspendUser(user.id)}
                           >
                             <Ban className="h-4 w-4 mr-1" />
                             Suspend
@@ -403,11 +431,24 @@ export default function AdminDashboard() {
                         </div>
 
                         <div className="flex gap-2">
-                          <Button variant="outline" size="sm" className="font-nunito bg-transparent">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="font-nunito bg-transparent"
+                            onClick={() => {
+                              setSelectedVerification(verification)
+                              setVerifyNotes(verification.notes ?? "")
+                              setRejectReason("")
+                            }}
+                          >
                             <Eye className="h-4 w-4 mr-1" />
                             Review
                           </Button>
-                          <Button size="sm" className="tyrent-gradient text-white font-nunito">
+                          <Button
+                            size="sm"
+                            className="tyrent-gradient text-white font-nunito"
+                            onClick={() => approveVerification(verification.id)}
+                          >
                             <CheckCircle2 className="h-4 w-4 mr-1" />
                             Approve
                           </Button>
@@ -415,6 +456,7 @@ export default function AdminDashboard() {
                             variant="outline"
                             size="sm"
                             className="text-red-600 border-red-600 font-nunito bg-transparent"
+                            onClick={() => rejectVerification(verification.id)}
                           >
                             <XCircle className="h-4 w-4 mr-1" />
                             Reject
@@ -477,11 +519,23 @@ export default function AdminDashboard() {
                         </div>
 
                         <div className="flex gap-2">
-                          <Button variant="outline" size="sm" className="font-nunito bg-transparent">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="font-nunito bg-transparent"
+                            onClick={() => investigateDispute(dispute.id)}
+                          >
                             <Eye className="h-4 w-4 mr-1" />
                             Investigate
                           </Button>
-                          <Button size="sm" className="tyrent-gradient text-white font-nunito">
+                          <Button
+                            size="sm"
+                            className="tyrent-gradient text-white font-nunito"
+                            onClick={() => {
+                              setSelectedDispute(dispute)
+                              setResolutionText("")
+                            }}
+                          >
                             <Shield className="h-4 w-4 mr-1" />
                             Resolve
                           </Button>
@@ -522,12 +576,14 @@ export default function AdminDashboard() {
                       <div>
                         <div className="flex items-center justify-between mb-2">
                           <span className="text-sm text-muted-foreground font-nunito">Landlords</span>
-                          <span className="text-sm font-semibold font-nunito">{stats.totalLandlords}</span>
+                          <span className="text-sm font-semibold font-nunito">{stats?.totalLandlords ?? 0}</span>
                         </div>
                         <div className="h-3 bg-muted rounded-full overflow-hidden">
                           <div
                             className="h-full tyrent-gradient"
-                            style={{ width: `${(stats.totalLandlords / stats.totalUsers) * 100}%` }}
+                            style={{
+                              width: `${((stats?.totalLandlords ?? 0) / Math.max(1, stats?.totalUsers ?? 1)) * 100}%`,
+                            }}
                           />
                         </div>
                       </div>
@@ -535,12 +591,14 @@ export default function AdminDashboard() {
                       <div>
                         <div className="flex items-center justify-between mb-2">
                           <span className="text-sm text-muted-foreground font-nunito">Tenants</span>
-                          <span className="text-sm font-semibold font-nunito">{stats.totalTenants}</span>
+                          <span className="text-sm font-semibold font-nunito">{stats?.totalTenants ?? 0}</span>
                         </div>
                         <div className="h-3 bg-muted rounded-full overflow-hidden">
                           <div
                             className="h-full bg-blue-500"
-                            style={{ width: `${(stats.totalTenants / stats.totalUsers) * 100}%` }}
+                            style={{
+                              width: `${((stats?.totalTenants ?? 0) / Math.max(1, stats?.totalUsers ?? 1)) * 100}%`,
+                            }}
                           />
                         </div>
                       </div>
@@ -548,7 +606,9 @@ export default function AdminDashboard() {
                       <div className="pt-4 border-t border-border">
                         <p className="text-sm text-muted-foreground mb-2 font-nunito">Occupancy Rate</p>
                         <div className="flex items-end gap-2">
-                          <p className="text-4xl font-bold text-foreground font-montserrat">{stats.occupancyRate}%</p>
+                          <p className="text-4xl font-bold text-foreground font-montserrat">
+                            {stats?.occupancyRate ?? 0}%
+                          </p>
                           <div className="flex items-center gap-1 text-green-600 mb-2">
                             <TrendingUp className="h-4 w-4" />
                             <span className="text-sm font-semibold font-nunito">+3.2%</span>
@@ -561,6 +621,208 @@ export default function AdminDashboard() {
               </div>
             </TabsContent>
           </Tabs>
+
+          {/* User View Modal */}
+          {selectedUser && (
+            <>
+              <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40" onClick={() => setSelectedUser(null)} />
+              <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                <Card className="w-full max-w-lg">
+                  <CardContent className="p-6">
+                    <div className="flex items-start justify-between gap-4 mb-4">
+                      <div>
+                        <h3 className="text-xl font-bold text-foreground font-montserrat">{selectedUser.name}</h3>
+                        <p className="text-sm text-muted-foreground font-nunito">{selectedUser.email}</p>
+                      </div>
+                      <Button variant="ghost" size="sm" className="font-nunito" onClick={() => setSelectedUser(null)}>
+                        Close
+                      </Button>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2 mb-4">
+                      <Badge variant="outline">{selectedUser.type}</Badge>
+                      <Badge variant="outline">Status: {selectedUser.status}</Badge>
+                      {selectedUser.verified && (
+                        <Badge variant="outline" className="text-green-600 border-green-600">
+                          <CheckCircle2 className="h-3 w-3 mr-1" />
+                          Verified
+                        </Badge>
+                      )}
+                    </div>
+
+                    <p className="text-sm text-muted-foreground font-nunito">Joined: {selectedUser.joinedDate}</p>
+
+                    <div className="mt-6 flex items-center justify-end gap-2">
+                      {selectedUser.status === "pending" && (
+                        <Button
+                          variant="outline"
+                          className="text-green-600 border-green-600 font-nunito bg-transparent"
+                          onClick={() => {
+                            approveUser(selectedUser.id)
+                            setSelectedUser(null)
+                          }}
+                        >
+                          Approve
+                        </Button>
+                      )}
+                      <Button
+                        variant="outline"
+                        className="text-red-600 border-red-600 font-nunito bg-transparent"
+                        onClick={() => {
+                          suspendUser(selectedUser.id)
+                          setSelectedUser(null)
+                        }}
+                      >
+                        Suspend
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            </>
+          )}
+
+          {/* Verification Review Modal */}
+          {selectedVerification && (
+            <>
+              <div
+                className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40"
+                onClick={() => setSelectedVerification(null)}
+              />
+              <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                <Card className="w-full max-w-xl">
+                  <CardContent className="p-6">
+                    <div className="flex items-start justify-between gap-4 mb-4">
+                      <div>
+                        <h3 className="text-xl font-bold text-foreground font-montserrat">Review Verification</h3>
+                        <p className="text-sm text-muted-foreground font-nunito">
+                          {selectedVerification.landlord} • {selectedVerification.property}
+                        </p>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="font-nunito"
+                        onClick={() => setSelectedVerification(null)}
+                      >
+                        Close
+                      </Button>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2 mb-4">
+                      <Badge variant="outline">Status: {selectedVerification.status}</Badge>
+                      <Badge variant="outline">Submitted: {selectedVerification.submittedDate}</Badge>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2 mb-4">
+                      {selectedVerification.documents.map((doc) => (
+                        <Badge key={doc} variant="outline" className="font-nunito">
+                          <FileText className="h-3 w-3 mr-1" />
+                          {doc}
+                        </Badge>
+                      ))}
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="block text-sm font-semibold text-foreground font-montserrat">Notes</label>
+                      <textarea
+                        value={verifyNotes}
+                        onChange={(e) => setVerifyNotes(e.target.value)}
+                        rows={3}
+                        className="w-full px-4 py-3 border border-input rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-ring font-nunito resize-none"
+                        placeholder="Internal notes (optional)"
+                      />
+                      <label className="block text-sm font-semibold text-foreground font-montserrat mt-4">
+                        Rejection reason (only if rejecting)
+                      </label>
+                      <textarea
+                        value={rejectReason}
+                        onChange={(e) => setRejectReason(e.target.value)}
+                        rows={3}
+                        className="w-full px-4 py-3 border border-input rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-ring font-nunito resize-none"
+                        placeholder="Reason for rejection"
+                      />
+                    </div>
+
+                    <div className="mt-6 flex items-center justify-between gap-2">
+                      <Button
+                        variant="outline"
+                        className="bg-transparent font-nunito"
+                        onClick={() => markVerificationReview(selectedVerification.id)}
+                      >
+                        Mark Under Review
+                      </Button>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          className="text-red-600 border-red-600 font-nunito bg-transparent"
+                          onClick={() => rejectVerification(selectedVerification.id)}
+                        >
+                          Reject
+                        </Button>
+                        <Button className="tyrent-gradient text-white font-nunito" onClick={() => approveVerification(selectedVerification.id)}>
+                          Approve
+                        </Button>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            </>
+          )}
+
+          {/* Dispute Resolve Modal */}
+          {selectedDispute && (
+            <>
+              <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40" onClick={() => setSelectedDispute(null)} />
+              <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                <Card className="w-full max-w-xl">
+                  <CardContent className="p-6">
+                    <div className="flex items-start justify-between gap-4 mb-4">
+                      <div>
+                        <h3 className="text-xl font-bold text-foreground font-montserrat">Resolve Dispute</h3>
+                        <p className="text-sm text-muted-foreground font-nunito">{selectedDispute.issue}</p>
+                      </div>
+                      <Button variant="ghost" size="sm" className="font-nunito" onClick={() => setSelectedDispute(null)}>
+                        Close
+                      </Button>
+                    </div>
+
+                    <div className="space-y-1 text-sm text-muted-foreground font-nunito mb-4">
+                      <p>Tenant: {selectedDispute.tenant}</p>
+                      <p>Landlord: {selectedDispute.landlord}</p>
+                      <p>Property: {selectedDispute.property}</p>
+                      <p>Submitted: {selectedDispute.submittedDate}</p>
+                      <p>Status: {selectedDispute.status}</p>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-semibold text-foreground mb-2 font-montserrat">
+                        Resolution summary
+                      </label>
+                      <textarea
+                        value={resolutionText}
+                        onChange={(e) => setResolutionText(e.target.value)}
+                        rows={4}
+                        className="w-full px-4 py-3 border border-input rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-ring font-nunito resize-none"
+                        placeholder="Describe how this dispute was resolved..."
+                      />
+                    </div>
+
+                    <div className="mt-6 flex items-center justify-end gap-2">
+                      <Button variant="outline" className="bg-transparent font-nunito" onClick={() => setSelectedDispute(null)}>
+                        Cancel
+                      </Button>
+                      <Button className="tyrent-gradient text-white font-nunito" onClick={() => resolveDispute(selectedDispute.id)}>
+                        <Shield className="h-4 w-4 mr-2" />
+                        Mark Resolved
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>

@@ -1,6 +1,9 @@
 'use client'
 
 import React, { useState } from 'react'
+import Link from "next/link"
+import { PageRoutes } from "@/constants/page-routes"
+import { getFavorites, toggleFavorite } from "@/lib/user-preferences"
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { 
@@ -44,7 +47,7 @@ interface PropertyCardProps {
 
 export default function PropertyCard({ property }: PropertyCardProps) {
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
-  const [isFavorited, setIsFavorited] = useState(false)
+  const [isFavorited, setIsFavorited] = useState(() => getFavorites().includes(property.id))
 
   const nextImage = () => {
     setCurrentImageIndex((prev) => 
@@ -116,7 +119,10 @@ export default function PropertyCard({ property }: PropertyCardProps) {
 
           {/* Favorite Button */}
           <button
-            onClick={() => setIsFavorited(!isFavorited)}
+            onClick={() => {
+              setIsFavorited((prev) => !prev)
+              toggleFavorite(property.id)
+            }}
             className="absolute top-3 right-3 bg-background/80 hover:bg-background rounded-full p-2 shadow-md"
           >
             <Heart 
@@ -215,13 +221,17 @@ export default function PropertyCard({ property }: PropertyCardProps) {
               <span className="text-sm text-muted-foreground ml-1">/month</span>
             </div>
             <div className="flex space-x-2">
-              <Button variant="outline" size="sm" className="border-border hover:bg-accent">
-                <Eye className="h-4 w-4 mr-1" />
-                Tour
+              <Button asChild variant="outline" size="sm" className="border-border hover:bg-accent">
+                <Link href={`/virtual-tour/${property.id}`}>
+                  <Eye className="h-4 w-4 mr-1" />
+                  Tour
+                </Link>
               </Button>
-              <Button size="sm" className="tyrent-gradient dark:tyrent-gradient-dark">
-                <Calendar className="h-4 w-4 mr-1" />
-                Book
+              <Button asChild size="sm" className="tyrent-gradient dark:tyrent-gradient-dark text-white">
+                <Link href={PageRoutes.BOOKING(property.id)}>
+                  <Calendar className="h-4 w-4 mr-1" />
+                  Book
+                </Link>
               </Button>
             </div>
           </div>
