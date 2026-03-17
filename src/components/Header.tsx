@@ -51,28 +51,40 @@ export default function Header() {
     const handleScroll = () => {
       setScrolled(window.scrollY > 50)
     }
-
     window.addEventListener("scroll", handleScroll)
     return () => window.removeEventListener("scroll", handleScroll)
   }, [])
-
-  useEffect(() => {
-    if (scrolled && isMenuOpen) {
-      setIsMenuOpen(false)
-    }
-  }, [scrolled])
 
   const toggleTheme = () => {
     setTheme(theme === "light" ? "dark" : "light")
   }
 
-  const lightAtTop = mounted && theme === "light" && !scrolled
+  // Resolve actual applied theme from the <html> class (handles "system" correctly)
+  const resolvedTheme =
+    mounted
+      ? document.documentElement.classList.contains("dark")
+        ? "dark"
+        : "light"
+      : "light"
+
+  // Transparent header only when truly in light mode at page top
+  const isTransparent = mounted && resolvedTheme === "light" && !scrolled
+
+  // Icon color logic based on resolved theme
+  const iconColor = isTransparent
+    ? "text-foreground"
+    : resolvedTheme === "dark" && !scrolled
+      ? "text-white"
+      : "text-muted-foreground"
+
+  const toggleIconColor = iconColor
+
   const dashboardHref = sessionRole ? dashboardRouteForRole(sessionRole as any) : "/auth/login"
 
   return (
     <header
-      className={`fixed top-0 left-0 right-0 z-50 transition-all duration-500 ${
-        scrolled || lightAtTop
+      className={`fixed top-0 left-0 right-0 z-[70] transition-all duration-500 pointer-events-auto ${
+        scrolled || isTransparent
           ? "bg-background/95 backdrop-blur-md border-b border-border/50 shadow-sm"
           : "bg-transparent"
       }`}
@@ -86,7 +98,7 @@ export default function Header() {
             </div>
             <span
               className={`text-xl font-bold transition-colors duration-300 font-montserrat ${
-                scrolled || lightAtTop ? "text-foreground" : "text-white"
+                scrolled || isTransparent ? "text-foreground" : "text-white"
               }`}
             >
               Tyrent
@@ -95,49 +107,26 @@ export default function Header() {
 
           {/* Desktop Navigation */}
           <nav className="hidden md:flex items-center space-x-1">
-            <Link href="/">
-              <Button
-                variant="ghost"
-                className={`text-sm font-medium rounded-full px-4 transition-colors duration-300 font-nunito ${
-                  scrolled || lightAtTop ? "text-foreground hover:bg-accent" : "text-white hover:bg-white/10"
-                }`}
-              >
-                Home
-              </Button>
-            </Link>
-            <Link href="/properties">
-              <Button
-                variant="ghost"
-                className={`text-sm font-medium rounded-full px-4 transition-colors duration-300 font-nunito ${
-                  scrolled || lightAtTop ? "text-foreground hover:bg-accent" : "text-white hover:bg-white/10"
-                }`}
-              >
-                Properties
-              </Button>
-            </Link>
-            <Link href="/landlord/register">
-              <Button
-                variant="ghost"
-                className={`text-sm font-medium rounded-full px-4 transition-colors duration-300 font-nunito ${
-                  scrolled || lightAtTop ? "text-foreground hover:bg-accent" : "text-white hover:bg-white/10"
-                }`}
-              >
-                Become a Landlord
-              </Button>
-            </Link>
-            <Link href="/tenant/dashboard">
-              <Button
-                variant="ghost"
-                className={`text-sm font-medium rounded-full px-4 transition-colors duration-300 font-nunito ${
-                  scrolled || lightAtTop ? "text-foreground hover:bg-accent" : "text-white hover:bg-white/10"
-                }`}
-              >
-                My Bookings
-              </Button>
-            </Link>
+            {[
+              { href: "/", label: "Home" },
+              { href: "/properties", label: "Properties" },
+              { href: "/landlord/register", label: "Become a Landlord" },
+              { href: "/tenant/dashboard", label: "My Bookings" },
+            ].map(({ href, label }) => (
+              <Link key={href} href={href}>
+                <Button
+                  variant="ghost"
+                  className={`text-sm font-medium rounded-full px-4 transition-colors duration-300 font-nunito ${
+                    scrolled || isTransparent ? "text-foreground hover:bg-accent" : "text-white hover:bg-white/10"
+                  }`}
+                >
+                  {label}
+                </Button>
+              </Link>
+            ))}
           </nav>
 
-          {/* Right Side Navigation */}
+          {/* Right Side */}
           <div className="hidden md:flex items-center space-x-2">
             {/* Dashboard / Auth */}
             {mounted && (
@@ -148,7 +137,7 @@ export default function Header() {
                       asChild
                       variant="outline"
                       className={`font-nunito bg-transparent ${
-                        scrolled || lightAtTop ? "" : "border-white/30 text-white hover:bg-white/10"
+                        scrolled || isTransparent ? "" : "border-white/30 text-white hover:bg-white/10"
                       }`}
                     >
                       <Link href={dashboardHref}>
@@ -158,7 +147,9 @@ export default function Header() {
                     </Button>
                     <Button
                       variant="ghost"
-                      className={`font-nunito ${scrolled || lightAtTop ? "text-foreground" : "text-white hover:bg-white/10"}`}
+                      className={`font-nunito ${
+                        scrolled || isTransparent ? "text-foreground" : "text-white hover:bg-white/10"
+                      }`}
                       onClick={() => {
                         signOut()
                         setSessionRole(null)
@@ -175,7 +166,7 @@ export default function Header() {
                       asChild
                       variant="outline"
                       className={`font-nunito bg-transparent ${
-                        scrolled || lightAtTop ? "" : "border-white/30 text-white hover:bg-white/10"
+                        scrolled || isTransparent ? "" : "border-white/30 text-white hover:bg-white/10"
                       }`}
                     >
                       <Link href="/auth/register">Sign up</Link>
@@ -183,7 +174,9 @@ export default function Header() {
                     <Button
                       asChild
                       className={`font-nunito ${
-                        scrolled || lightAtTop ? "tyrent-gradient text-white" : "bg-white/10 text-white hover:bg-white/20"
+                        scrolled || isTransparent
+                          ? "tyrent-gradient text-white"
+                          : "bg-white/10 text-white hover:bg-white/20"
                       }`}
                     >
                       <Link href="/auth/login">Sign in</Link>
@@ -193,34 +186,34 @@ export default function Header() {
               </>
             )}
 
-            {/* Theme Toggle */}
+            {/* Theme Toggle — fixed visibility */}
             {mounted && (
               <Button
                 variant="ghost"
                 size="icon"
                 onClick={toggleTheme}
                 className={`rounded-full transition-colors duration-300 ${
-                  scrolled || lightAtTop ? "hover:bg-accent" : "hover:bg-white/10"
+                  scrolled || isTransparent ? "hover:bg-accent" : "hover:bg-white/10"
                 }`}
                 title={`Switch to ${theme === "light" ? "dark" : "light"} mode`}
               >
                 {theme === "light" ? (
-                  <Moon className={`h-5 w-5 ${scrolled || lightAtTop ? "text-muted-foreground" : "text-white"}`} />
+                  <Moon className={`h-5 w-5 ${toggleIconColor}`} />
                 ) : (
-                  <Sun className={`h-5 w-5 ${scrolled || lightAtTop ? "text-muted-foreground" : "text-white"}`} />
+                  <Sun className={`h-5 w-5 ${toggleIconColor}`} />
                 )}
               </Button>
             )}
 
             {/* Notifications */}
-            <Button 
-              variant="ghost" 
-              size="icon" 
+            <Button
+              variant="ghost"
+              size="icon"
               className={`rounded-full transition-colors duration-300 ${
-                scrolled || lightAtTop ? "hover:bg-accent" : "hover:bg-white/10"
+                scrolled || isTransparent ? "hover:bg-accent" : "hover:bg-white/10"
               }`}
             >
-              <Bell className={`h-5 w-5 ${scrolled || lightAtTop ? "text-muted-foreground" : "text-white"}`} />
+              <Bell className={`h-5 w-5 ${iconColor}`} />
             </Button>
 
             {/* Favorites */}
@@ -229,24 +222,26 @@ export default function Header() {
                 variant="ghost"
                 size="icon"
                 className={`rounded-full transition-colors duration-300 ${
-                  scrolled || lightAtTop ? "hover:bg-accent" : "hover:bg-white/10"
+                  scrolled || isTransparent ? "hover:bg-accent" : "hover:bg-white/10"
                 }`}
               >
-                <Heart className={`h-5 w-5 ${scrolled || lightAtTop ? "text-muted-foreground" : "text-white"}`} />
+                <Heart className={`h-5 w-5 ${iconColor}`} />
               </Button>
             </Link>
 
             {/* User Menu */}
-            <div className={`flex items-center space-x-2 rounded-full p-1 border hover:shadow-md transition-all duration-300 cursor-pointer ${
-              scrolled || lightAtTop
-                ? "border-border bg-background" 
-                : "border-white/30 bg-white/10 backdrop-blur-sm"
-            }`}>
+            <div
+              className={`flex items-center space-x-2 rounded-full p-1 border hover:shadow-md transition-all duration-300 cursor-pointer ${
+                scrolled || isTransparent
+                  ? "border-border bg-background"
+                  : "border-white/30 bg-white/10 backdrop-blur-sm"
+              }`}
+            >
               <Button variant="ghost" size="icon" className="rounded-full h-8 w-8 hover:bg-transparent">
-                <Menu className={`h-4 w-4 ${scrolled || lightAtTop ? "text-muted-foreground" : "text-white"}`} />
+                <Menu className={`h-4 w-4 ${iconColor}`} />
               </Button>
               <Button variant="ghost" size="icon" className="rounded-full h-8 w-8 hover:bg-transparent">
-                <User className={`h-4 w-4 ${scrolled || lightAtTop ? "text-muted-foreground" : "text-white"}`} />
+                <User className={`h-4 w-4 ${iconColor}`} />
               </Button>
             </div>
           </div>
@@ -255,66 +250,50 @@ export default function Header() {
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => setIsMenuOpen(!isMenuOpen)}
-            className={`md:hidden rounded-full z-50 ${
-              scrolled || lightAtTop ? "hover:bg-accent" : "hover:bg-white/10"
+            type="button"
+            onClick={() => setIsMenuOpen((v) => !v)}
+            className={`md:hidden rounded-full relative z-[90] ${
+              scrolled || isTransparent ? "hover:bg-accent" : "hover:bg-white/10"
             }`}
           >
             {isMenuOpen ? (
-              <X className={`h-6 w-6 ${scrolled || lightAtTop ? "" : "text-white"}`} />
+              <X className={`h-6 w-6 ${scrolled || isTransparent ? "" : "text-white"}`} />
             ) : (
-              <Menu className={`h-6 w-6 ${scrolled || lightAtTop ? "" : "text-white"}`} />
+              <Menu className={`h-6 w-6 ${scrolled || isTransparent ? "" : "text-white"}`} />
             )}
           </Button>
         </div>
       </div>
 
-      {/* Modern Mobile Menu */}
+      {/* Mobile Menu */}
       {isMenuOpen && (
         <>
-          {/* Backdrop */}
+          {/* Backdrop — boosted opacity so it's clearly visible on light mode too */}
           <div
-            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 md:hidden"
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[80] md:hidden pointer-events-auto"
             onClick={() => setIsMenuOpen(false)}
           />
-
-          {/* Menu Panel */}
-          <div className="fixed top-16 left-0 right-0 bottom-0 bg-background z-40 md:hidden overflow-y-auto">
-            <div className="container mx-auto px-4 py-6">
+          {/* Side drawer — only 80% width so backdrop shows on the right */}
+          <div className="fixed top-0 left-0 bottom-0 w-[80%] max-w-sm bg-background z-[85] md:hidden overflow-y-auto pointer-events-auto shadow-2xl">
+            <div className="container mx-auto px-4 pt-20 pb-6">
               {/* Navigation Links */}
               <div className="space-y-1 mb-8">
-                <Link
-                  href="/"
-                  onClick={() => setIsMenuOpen(false)}
-                  className="flex items-center space-x-3 px-4 py-3 rounded-lg hover:bg-accent transition-colors group"
-                >
-                  <Home className="h-5 w-5 text-muted-foreground group-hover:text-foreground" />
-                  <span className="text-base font-medium text-foreground font-nunito">Home</span>
-                </Link>
-                <Link
-                  href="/properties"
-                  onClick={() => setIsMenuOpen(false)}
-                  className="flex items-center space-x-3 px-4 py-3 rounded-lg hover:bg-accent transition-colors group"
-                >
-                  <Search className="h-5 w-5 text-muted-foreground group-hover:text-foreground" />
-                  <span className="text-base font-medium text-foreground font-nunito">Browse Properties</span>
-                </Link>
-                <Link
-                  href="/landlord/register"
-                  onClick={() => setIsMenuOpen(false)}
-                  className="flex items-center space-x-3 px-4 py-3 rounded-lg hover:bg-accent transition-colors group"
-                >
-                  <Building2 className="h-5 w-5 text-muted-foreground group-hover:text-foreground" />
-                  <span className="text-base font-medium text-foreground font-nunito">Become a Landlord</span>
-                </Link>
-                <Link
-                  href="/tenant/dashboard"
-                  onClick={() => setIsMenuOpen(false)}
-                  className="flex items-center space-x-3 px-4 py-3 rounded-lg hover:bg-accent transition-colors group"
-                >
-                  <LayoutDashboard className="h-5 w-5 text-muted-foreground group-hover:text-foreground" />
-                  <span className="text-base font-medium text-foreground font-nunito">My Bookings</span>
-                </Link>
+                {[
+                  { href: "/", label: "Home", Icon: Home },
+                  { href: "/properties", label: "Browse Properties", Icon: Search },
+                  { href: "/landlord/register", label: "Become a Landlord", Icon: Building2 },
+                  { href: "/tenant/dashboard", label: "My Bookings", Icon: LayoutDashboard },
+                ].map(({ href, label, Icon }) => (
+                  <Link
+                    key={href}
+                    href={href}
+                    onClick={() => setIsMenuOpen(false)}
+                    className="flex items-center space-x-3 px-4 py-3 rounded-lg hover:bg-accent transition-colors group"
+                  >
+                    <Icon className="h-5 w-5 text-muted-foreground group-hover:text-foreground" />
+                    <span className="text-base font-medium text-foreground font-nunito">{label}</span>
+                  </Link>
+                ))}
               </div>
 
               {/* Quick Actions */}
@@ -395,14 +374,18 @@ export default function Header() {
                 )}
               </div>
 
-              {/* Theme Toggle */}
+              {/* Theme Toggle in mobile menu — always visible */}
               {mounted && (
                 <div className="flex items-center justify-between px-4 py-4 mt-6 border-t border-border">
                   <span className="text-sm font-medium text-foreground font-nunito">
                     {theme === "light" ? "Light Mode" : "Dark Mode"}
                   </span>
                   <Button variant="outline" size="icon" onClick={toggleTheme} className="rounded-full bg-transparent">
-                    {theme === "light" ? <Moon className="h-5 w-5" /> : <Sun className="h-5 w-5" />}
+                    {theme === "light" ? (
+                      <Moon className="h-5 w-5 text-foreground" />
+                    ) : (
+                      <Sun className="h-5 w-5 text-foreground" />
+                    )}
                   </Button>
                 </div>
               )}
