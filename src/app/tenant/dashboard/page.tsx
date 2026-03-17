@@ -3,6 +3,7 @@
 import Link from "next/link"
 import { useEffect, useMemo, useState } from "react"
 import { motion } from "framer-motion"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -38,6 +39,7 @@ import {
   type TenantMaintenanceRequest,
   type TenantPayment,
 } from "@/lib/tenant-storage"
+import { requireAuth } from "@/lib/route-guards"
 
 function daysUntil(dateIso: string) {
   const target = new Date(dateIso)
@@ -61,6 +63,7 @@ function downloadText(filename: string, content: string) {
 }
 
 export default function TenantDashboard() {
+  const router = useRouter()
   const [selectedTab, setSelectedTab] = useState("overview")
   const [banner, setBanner] = useState<{ title: string; message: string } | null>(null)
 
@@ -87,6 +90,11 @@ export default function TenantDashboard() {
   const [detailsRequest, setDetailsRequest] = useState<TenantMaintenanceRequest | null>(null)
 
   useEffect(() => {
+    const auth = requireAuth({ role: "tenant" })
+    if (!auth.ok) {
+      router.replace(auth.redirectTo)
+      return
+    }
     seedTenantDemoDataIfEmpty()
     setLease(getTenantLease())
     setPaymentHistory(getTenantPayments())

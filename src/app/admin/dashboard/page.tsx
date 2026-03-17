@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { motion } from "framer-motion"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -36,8 +37,10 @@ import {
   updateAdminUser,
   updateAdminVerification,
 } from "@/lib/admin-storage"
+import { requireAuth } from "@/lib/route-guards"
 
 export default function AdminDashboard() {
+  const router = useRouter()
   const [selectedPeriod, setSelectedPeriod] = useState("month")
   const [banner, setBanner] = useState<{ title: string; message: string } | null>(null)
 
@@ -55,6 +58,11 @@ export default function AdminDashboard() {
   const [resolutionText, setResolutionText] = useState("")
 
   useEffect(() => {
+    const auth = requireAuth({ role: "admin" })
+    if (!auth.ok) {
+      router.replace(auth.redirectTo)
+      return
+    }
     seedAdminDemoDataIfEmpty()
     setStats(getAdminStats())
     setRecentUsers(getAdminUsers())

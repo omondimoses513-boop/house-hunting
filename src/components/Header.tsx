@@ -4,6 +4,9 @@ import { useState, useEffect } from "react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { useTheme } from "@/components/theme-provider"
+import { useRouter } from "next/navigation"
+import { getSession, signOut } from "@/lib/auth"
+import { dashboardRouteForRole } from "@/lib/route-guards"
 import {
   Menu,
   User,
@@ -21,13 +24,27 @@ import {
 } from "lucide-react"
 
 export default function Header() {
+  const router = useRouter()
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [scrolled, setScrolled] = useState(false)
   const { theme, setTheme } = useTheme()
   const [mounted, setMounted] = useState(false)
+  const [sessionRole, setSessionRole] = useState<string | null>(null)
+  const [sessionName, setSessionName] = useState<string | null>(null)
 
   useEffect(() => {
     setMounted(true)
+  }, [])
+
+  useEffect(() => {
+    const sync = () => {
+      const session = getSession()
+      setSessionRole(session?.user.role ?? null)
+      setSessionName(session?.user.fullName ?? null)
+    }
+    sync()
+    window.addEventListener("storage", sync)
+    return () => window.removeEventListener("storage", sync)
   }, [])
 
   useEffect(() => {
@@ -50,6 +67,7 @@ export default function Header() {
   }
 
   const lightAtTop = mounted && theme === "light" && !scrolled
+  const dashboardHref = sessionRole ? dashboardRouteForRole(sessionRole as any) : "/auth/login"
 
   return (
     <header
@@ -121,6 +139,60 @@ export default function Header() {
 
           {/* Right Side Navigation */}
           <div className="hidden md:flex items-center space-x-2">
+            {/* Dashboard / Auth */}
+            {mounted && (
+              <>
+                {sessionRole ? (
+                  <>
+                    <Button
+                      asChild
+                      variant="outline"
+                      className={`font-nunito bg-transparent ${
+                        scrolled || lightAtTop ? "" : "border-white/30 text-white hover:bg-white/10"
+                      }`}
+                    >
+                      <Link href={dashboardHref}>
+                        <LayoutDashboard className="h-4 w-4 mr-2" />
+                        {sessionName ? sessionName.split(" ")[0] : "Dashboard"}
+                      </Link>
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      className={`font-nunito ${scrolled || lightAtTop ? "text-foreground" : "text-white hover:bg-white/10"}`}
+                      onClick={() => {
+                        signOut()
+                        setSessionRole(null)
+                        setSessionName(null)
+                        router.push("/auth/login")
+                      }}
+                    >
+                      Sign out
+                    </Button>
+                  </>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <Button
+                      asChild
+                      variant="outline"
+                      className={`font-nunito bg-transparent ${
+                        scrolled || lightAtTop ? "" : "border-white/30 text-white hover:bg-white/10"
+                      }`}
+                    >
+                      <Link href="/auth/register">Sign up</Link>
+                    </Button>
+                    <Button
+                      asChild
+                      className={`font-nunito ${
+                        scrolled || lightAtTop ? "tyrent-gradient text-white" : "bg-white/10 text-white hover:bg-white/20"
+                      }`}
+                    >
+                      <Link href="/auth/login">Sign in</Link>
+                    </Button>
+                  </div>
+                )}
+              </>
+            )}
+
             {/* Theme Toggle */}
             {mounted && (
               <Button
@@ -266,23 +338,61 @@ export default function Header() {
 
               {/* Auth Buttons */}
               <div className="space-y-3 px-4">
-                <Button
-                  size="lg"
-                  variant="outline"
-                  className="w-full justify-center font-nunito bg-transparent"
-                  onClick={() => setIsMenuOpen(false)}
-                >
-                  <LogIn className="h-4 w-4 mr-2" />
-                  Sign In
-                </Button>
-                <Button
-                  size="lg"
-                  className="w-full justify-center tyrent-gradient text-white font-nunito"
-                  onClick={() => setIsMenuOpen(false)}
-                >
-                  <UserPlus className="h-4 w-4 mr-2" />
-                  Sign Up
-                </Button>
+                {sessionRole ? (
+                  <>
+                    <Button
+                      size="lg"
+                      variant="outline"
+                      className="w-full justify-center font-nunito bg-transparent"
+                      asChild
+                      onClick={() => setIsMenuOpen(false)}
+                    >
+                      <Link href={dashboardHref}>
+                        <LayoutDashboard className="h-4 w-4 mr-2" />
+                        Dashboard
+                      </Link>
+                    </Button>
+                    <Button
+                      size="lg"
+                      className="w-full justify-center tyrent-gradient text-white font-nunito"
+                      onClick={() => {
+                        signOut()
+                        setSessionRole(null)
+                        setSessionName(null)
+                        setIsMenuOpen(false)
+                        router.push("/auth/login")
+                      }}
+                    >
+                      Sign out
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <Button
+                      size="lg"
+                      variant="outline"
+                      className="w-full justify-center font-nunito bg-transparent"
+                      asChild
+                      onClick={() => setIsMenuOpen(false)}
+                    >
+                      <Link href="/auth/login">
+                        <LogIn className="h-4 w-4 mr-2" />
+                        Sign In
+                      </Link>
+                    </Button>
+                    <Button
+                      size="lg"
+                      className="w-full justify-center tyrent-gradient text-white font-nunito"
+                      asChild
+                      onClick={() => setIsMenuOpen(false)}
+                    >
+                      <Link href="/auth/register">
+                        <UserPlus className="h-4 w-4 mr-2" />
+                        Sign Up
+                      </Link>
+                    </Button>
+                  </>
+                )}
               </div>
 
               {/* Theme Toggle */}

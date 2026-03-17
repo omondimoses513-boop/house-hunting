@@ -33,6 +33,7 @@ import {
   type LandlordProperty,
   updateBookingStatus,
 } from "@/lib/landlord-storage"
+import { requireAuth } from "@/lib/route-guards"
 
 export default function LandlordDashboard() {
   const router = useRouter()
@@ -47,6 +48,11 @@ export default function LandlordDashboard() {
   const profile = useMemo(() => getLandlordProfile(), [])
 
   useEffect(() => {
+    const auth = requireAuth({ role: "landlord" })
+    if (!auth.ok) {
+      router.replace(auth.redirectTo)
+      return
+    }
     seedLandlordDemoDataIfEmpty()
     const nextProperties = getLandlordProperties()
     const nextBookings = getLandlordBookings()
