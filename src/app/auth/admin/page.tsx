@@ -9,17 +9,13 @@ import { Card, CardContent } from "@/components/ui/card"
 import { PageRoutes } from "@/constants/page-routes"
 import { getSession, registerUser } from "@/lib/auth"
 
-// Must match ADMIN_INVITE_CODE in @/lib/auth — both read from the same env var
-const VALID_INVITE_CODE =
-  process.env.NEXT_PUBLIC_ADMIN_INVITE_CODE || "TYRENT-ADMIN-INVITE"
-
 export default function AdminInvitePage() {
   const router = useRouter()
   const existingSession = useMemo(() => getSession(), [])
 
   const [fullName, setFullName] = useState("")
   const [email, setEmail] = useState("")
-  const [inviteCodeInput, setInviteCodeInput] = useState("")
+  const [inviteCode, setInviteCode] = useState("")
   const [password, setPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
   const [error, setError] = useState<string | null>(null)
@@ -32,30 +28,14 @@ export default function AdminInvitePage() {
 
   const handleSubmit = () => {
     setError(null)
-
-    if (!fullName || !email || !password || !confirmPassword || !inviteCodeInput) {
-      setError("Please fill in all fields.")
-      return
-    }
-
-    if (inviteCodeInput !== VALID_INVITE_CODE) {
-      setError("Invalid invite code.")
-      return
-    }
-
     if (password !== confirmPassword) {
       setError("Passwords do not match.")
       return
     }
 
-    if (password.length < 8) {
-      setError("Password must be at least 8 characters.")
-      return
-    }
-
     setLoading(true)
     try {
-      registerUser({ fullName, email, password, role: "admin", adminInviteCode: inviteCodeInput })
+      registerUser({ fullName, email, password, role: "admin", adminInviteCode: inviteCode })
       router.push(PageRoutes.ADMIN_DASHBOARD)
     } catch (e) {
       setError(e instanceof Error ? e.message : "Admin signup failed.")
@@ -81,7 +61,6 @@ export default function AdminInvitePage() {
                   type="text"
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
-                  placeholder="John Doe"
                   className="w-full px-4 py-3 border border-input rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-ring font-nunito"
                 />
               </div>
@@ -92,7 +71,6 @@ export default function AdminInvitePage() {
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="admin@example.com"
                   className="w-full px-4 py-3 border border-input rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-ring font-nunito"
                 />
               </div>
@@ -100,14 +78,14 @@ export default function AdminInvitePage() {
               <div>
                 <label className="block text-sm font-semibold text-foreground mb-2 font-montserrat">Invite code</label>
                 <input
-                  type="text"
-                  value={inviteCodeInput}
-                  onChange={(e) => setInviteCodeInput(e.target.value)}
+                  type="password"
+                  value={inviteCode}
+                  onChange={(e) => setInviteCode(e.target.value)}
                   placeholder="Enter invite code"
                   className="w-full px-4 py-3 border border-input rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-ring font-nunito"
                 />
                 <p className="text-xs text-muted-foreground font-nunito mt-2">
-                  For now this is frontend-only. We'll enforce invite-only on the backend next week.
+                  For now this is frontend-only. We’ll enforce invite-only on the backend next week.
                 </p>
               </div>
 
@@ -117,7 +95,6 @@ export default function AdminInvitePage() {
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
                   className="w-full px-4 py-3 border border-input rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-ring font-nunito"
                 />
               </div>
@@ -130,7 +107,6 @@ export default function AdminInvitePage() {
                   type="password"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
-                  placeholder="••••••••"
                   className="w-full px-4 py-3 border border-input rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-ring font-nunito"
                 />
               </div>
@@ -141,11 +117,7 @@ export default function AdminInvitePage() {
                 </div>
               )}
 
-              <Button
-                onClick={handleSubmit}
-                className="w-full tyrent-gradient text-white font-nunito"
-                disabled={loading}
-              >
+              <Button onClick={handleSubmit} className="w-full tyrent-gradient text-white font-nunito" disabled={loading}>
                 {loading ? "Creating..." : "Create admin account"}
               </Button>
 
@@ -168,3 +140,4 @@ export default function AdminInvitePage() {
     </div>
   )
 }
+
