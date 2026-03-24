@@ -20,6 +20,7 @@ const KEYS = {
   USERS: "tyrent_auth_users_v1",
   SESSION: "tyrent_auth_session_v1",
 } as const
+const AUTH_CHANGED_EVENT = "tyrent-auth-changed"
 
 const ADMIN_INVITE_CODE =
   // Optional: configure at build time for staging/prod
@@ -29,6 +30,11 @@ const ADMIN_INVITE_CODE =
 
 function isBrowser() {
   return typeof window !== "undefined" && typeof window.localStorage !== "undefined"
+}
+
+function emitAuthChanged() {
+  if (!isBrowser()) return
+  window.dispatchEvent(new Event(AUTH_CHANGED_EVENT))
 }
 
 function safeParseJson<T>(value: string | null): T | null {
@@ -72,11 +78,13 @@ export function getSession(): AuthSession | null {
 export function saveSession(session: AuthSession) {
   if (!isBrowser()) return
   window.localStorage.setItem(KEYS.SESSION, JSON.stringify(session))
+  emitAuthChanged()
 }
 
 export function signOut() {
   if (!isBrowser()) return
   window.localStorage.removeItem(KEYS.SESSION)
+  emitAuthChanged()
 }
 
 export function registerUser(input: {
@@ -146,4 +154,6 @@ export function loginUser(input: { email: string; password: string }) {
   saveSession(session)
   return session
 }
+
+export { AUTH_CHANGED_EVENT }
 

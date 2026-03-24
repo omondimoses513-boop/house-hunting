@@ -5,7 +5,7 @@ import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { useTheme } from "@/components/theme-provider"
 import { useRouter } from "next/navigation"
-import { getSession, signOut } from "@/lib/auth"
+import { AUTH_CHANGED_EVENT, getSession, signOut } from "@/lib/auth"
 import { dashboardRouteForRole } from "@/lib/route-guards"
 import {
   Menu,
@@ -44,7 +44,11 @@ export default function Header() {
     }
     sync()
     window.addEventListener("storage", sync)
-    return () => window.removeEventListener("storage", sync)
+    window.addEventListener(AUTH_CHANGED_EVENT, sync)
+    return () => {
+      window.removeEventListener("storage", sync)
+      window.removeEventListener(AUTH_CHANGED_EVENT, sync)
+    }
   }, [])
 
   useEffect(() => {

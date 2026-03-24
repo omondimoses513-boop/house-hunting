@@ -7,8 +7,26 @@ import { motion } from "framer-motion"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { PageRoutes } from "@/constants/page-routes"
+import { AuthAlertBanner } from "@/components/auth/AuthAlertBanner"
 
 type UserRole = "TENANT" | "LANDLORD"
+
+function getErrorMessage(data: unknown) {
+  if (!data || typeof data !== "object") return "Registration failed."
+  const obj = data as Record<string, unknown>
+  if (typeof obj.error === "string") return obj.error
+  if (typeof obj.detail === "string") return obj.detail
+
+  const firstField = Object.values(obj).find((value) => {
+    if (typeof value === "string" && value.trim()) return true
+    if (Array.isArray(value) && typeof value[0] === "string") return true
+    return false
+  })
+
+  if (typeof firstField === "string") return firstField
+  if (Array.isArray(firstField) && typeof firstField[0] === "string") return firstField[0]
+  return "Registration failed."
+}
 
 export default function RegisterPage() {
   const router = useRouter()
@@ -44,15 +62,7 @@ export default function RegisterPage() {
     setLoading(true)
 
     try {
-      // ✅ 1. Get CSRF token
-      const csrfRes = await fetch("http://127.0.0.1:8000/api/auth/csrf/", {
-        credentials: "include",
-      })
-
-      const csrfData = await csrfRes.json()
-      const csrfToken = csrfData.csrfToken
-
-      // ✅ 2. Build FormData
+      // Build FormData
       const formData = new FormData()
       formData.append("username", username)
       formData.append("full_name", fullName)
@@ -69,17 +79,13 @@ export default function RegisterPage() {
         }
       }
 
-      // ✅ 3. Send request (IMPORTANT FIXES HERE)
-      const res = await fetch("http://127.0.0.1:8000/api/auth/register/", {
+      // Send request (no CSRF, no session — Token auth)
+      const res = await fetch("http://127.0.0.1:8000/api/auth/register", {
         method: "POST",
-        credentials: "include", // ✅ session auth
-        headers: {
-          "X-CSRFToken": csrfToken, // ✅ CSRF required
-        },
         body: formData,
       })
 
-      // ✅ 4. Handle non-JSON safely
+      // Handle non-JSON safely
       const text = await res.text()
       let data
 
@@ -90,15 +96,13 @@ export default function RegisterPage() {
         throw new Error("Server error. Check backend.")
       }
 
-      if (!res.ok) {
-        throw new Error(data.error || JSON.stringify(data))
-      }
+      if (!res.ok) throw new Error(getErrorMessage(data))
 
-      // ✅ SUCCESS
-      setSuccess("Account created successfully! Redirecting to login...")
+      // SUCCESS
+      setSuccess("Account created. Verify your email OTP to activate sign in.")
 
       setTimeout(() => {
-        router.push("/auth/login")
+        router.push(`/auth/verify-otp?email=${encodeURIComponent(email.trim())}&from=register`)
       }, 1500)
 
     } catch (err) {
@@ -206,17 +210,9 @@ export default function RegisterPage() {
                 className="w-full px-4 py-3 border rounded-lg"
               />
 
-              {error && (
-                <div className="p-3 bg-red-100 text-red-600 rounded-lg text-sm">
-                  {error}
-                </div>
-              )}
+              {error && <AuthAlertBanner tone="error" message={error} />}
 
-              {success && (
-                <div className="p-3 bg-green-100 text-green-600 rounded-lg text-sm">
-                  {success}
-                </div>
-              )}
+              {success && <AuthAlertBanner tone="success" message={success} />}
 
               <Button
                 onClick={handleSubmit}
