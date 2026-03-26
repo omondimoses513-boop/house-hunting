@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { PageRoutes } from "@/constants/page-routes"
 import { AuthAlertBanner } from "@/components/auth/AuthAlertBanner"
+import { Eye, EyeOff, IdCard, Lock, Mail, Phone, User, ChevronDown } from "lucide-react"
+import { backendRegister } from "@/lib/api/auth"
 
 type UserRole = "TENANT" | "LANDLORD"
 
@@ -38,6 +40,8 @@ export default function RegisterPage() {
   const [role, setRole] = useState<UserRole>("TENANT")
   const [password, setPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
+  const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [nationalId, setNationalId] = useState("")
   const [nationalIdImage, setNationalIdImage] = useState<File | null>(null)
 
@@ -79,24 +83,7 @@ export default function RegisterPage() {
         }
       }
 
-      // Send request (no CSRF, no session — Token auth)
-      const res = await fetch("http://127.0.0.1:8000/api/auth/register", {
-        method: "POST",
-        body: formData,
-      })
-
-      // Handle non-JSON safely
-      const text = await res.text()
-      let data
-
-      try {
-        data = JSON.parse(text)
-      } catch {
-        console.error("Server returned HTML:", text)
-        throw new Error("Server error. Check backend.")
-      }
-
-      if (!res.ok) throw new Error(getErrorMessage(data))
+      await backendRegister(formData)
 
       // SUCCESS
       setSuccess("Account created. Verify your email OTP to activate sign in.")
@@ -133,56 +120,102 @@ export default function RegisterPage() {
           <Card className="shadow-xl border-0">
             <CardContent className="p-6 space-y-5">
 
-              <input
-                type="text"
-                placeholder="Username *"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                className="w-full px-4 py-3 border rounded-lg"
-              />
+              <div className="relative">
+                <User
+                  size={18}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                />
+                <input
+                  type="text"
+                  aria-label="Username"
+                  placeholder="Username *"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  className="w-full px-4 py-3 border rounded-lg pl-10"
+                />
+              </div>
 
-              <input
-                type="text"
-                placeholder="Full name"
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
-                className="w-full px-4 py-3 border rounded-lg"
-              />
+              <div className="relative">
+                <User
+                  size={18}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                />
+                <input
+                  type="text"
+                  aria-label="Full name"
+                  placeholder="Full name"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  className="w-full px-4 py-3 border rounded-lg pl-10"
+                />
+              </div>
 
-              <input
-                type="email"
-                placeholder="Email *"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-4 py-3 border rounded-lg"
-              />
+              <div className="relative">
+                <Mail
+                  size={18}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                />
+                <input
+                  type="email"
+                  aria-label="Email"
+                  placeholder="Email *"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full px-4 py-3 border rounded-lg pl-10"
+                />
+              </div>
 
-              <input
-                type="text"
-                placeholder="Phone number"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                className="w-full px-4 py-3 border rounded-lg"
-              />
+              <div className="relative">
+                <Phone
+                  size={18}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                />
+                <input
+                  type="text"
+                  aria-label="Phone number"
+                  placeholder="Phone number"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  className="w-full px-4 py-3 border rounded-lg pl-10"
+                />
+              </div>
 
-              <select
-                value={role}
-                onChange={(e) => setRole(e.target.value as UserRole)}
-                className="w-full px-4 py-3 border rounded-lg"
-              >
-                <option value="TENANT">Tenant</option>
-                <option value="LANDLORD">Landlord</option>
-              </select>
+              <div className="relative">
+                <User
+                  size={18}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                />
+                <select
+                  value={role}
+                  onChange={(e) => setRole(e.target.value as UserRole)}
+                  className="w-full px-4 py-3 border rounded-lg pl-10 pr-10 appearance-none bg-background text-foreground dark:bg-background dark:text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                  aria-label="Role"
+                >
+                  <option value="TENANT">Tenant</option>
+                  <option value="LANDLORD">Landlord</option>
+                </select>
+                <ChevronDown
+                  size={18}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-foreground/70 dark:text-foreground/70 pointer-events-none z-10"
+                />
+              </div>
 
               {role === "LANDLORD" && (
                 <>
-                  <input
-                    type="text"
-                    placeholder="National ID"
-                    value={nationalId}
-                    onChange={(e) => setNationalId(e.target.value)}
-                    className="w-full px-4 py-3 border rounded-lg"
-                  />
+                  <div className="relative">
+                    <IdCard
+                      size={18}
+                      className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                    />
+                    <input
+                      type="text"
+                      aria-label="National ID"
+                      placeholder="National ID"
+                      value={nationalId}
+                      onChange={(e) => setNationalId(e.target.value)}
+                      className="w-full px-4 py-3 border rounded-lg pl-10"
+                    />
+                  </div>
 
                   <input
                     type="file"
@@ -194,21 +227,53 @@ export default function RegisterPage() {
                 </>
               )}
 
-              <input
-                type="password"
-                placeholder="Password *"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-4 py-3 border rounded-lg"
-              />
+              <div className="relative">
+                <Lock
+                  size={18}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                />
+                <input
+                  type={showPassword ? "text" : "password"}
+                  aria-label="Password"
+                  placeholder="Password *"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full px-4 py-3 border rounded-lg pl-10 pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  disabled={loading}
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
 
-              <input
-                type="password"
-                placeholder="Confirm password *"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                className="w-full px-4 py-3 border rounded-lg"
-              />
+              <div className="relative">
+                <Lock
+                  size={18}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                />
+                <input
+                  type={showConfirmPassword ? "text" : "password"}
+                  aria-label="Confirm password"
+                  placeholder="Confirm password *"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="w-full px-4 py-3 border rounded-lg pl-10 pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword((v) => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  aria-label={showConfirmPassword ? "Hide password" : "Show password"}
+                  disabled={loading}
+                >
+                  {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
 
               {error && <AuthAlertBanner tone="error" message={error} />}
 

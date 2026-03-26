@@ -22,6 +22,7 @@ import {
   Moon,
   LayoutDashboard,
 } from "lucide-react"
+import { TyrentLogoMark } from "@/components/TyrentLogo"
 
 export default function Header() {
   const router = useRouter()
@@ -98,7 +99,7 @@ export default function Header() {
           {/* Logo */}
           <Link href="/" className="flex items-center space-x-2 z-50">
             <div className="tyrent-gradient w-8 h-8 rounded-lg flex items-center justify-center shadow-lg">
-              <Building2 className="h-5 w-5 text-white" />
+              <TyrentLogoMark className="h-5 w-5 text-white" />
             </div>
             <span
               className={`text-xl font-bold transition-colors duration-300 font-montserrat ${

@@ -9,6 +9,9 @@ import { Card, CardContent } from "@/components/ui/card"
 import { PageRoutes } from "@/constants/page-routes"
 import { saveSession } from "@/lib/auth"
 import { AuthAlertBanner } from "@/components/auth/AuthAlertBanner"
+import { Eye, EyeOff, Lock, Mail } from "lucide-react"
+import { ApiError } from "@/lib/api/client"
+import { backendLogin } from "@/lib/api/auth"
 
 // Redirect user based on role
 function redirectForRole(role: string) {
@@ -48,6 +51,7 @@ export default function LoginPage() {
 
   const [email, setEmail] = useState(defaultEmail)
   const [password, setPassword] = useState("")
+  const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(
     defaultEmail ? "Email verified. You can now sign in." : null,
@@ -60,51 +64,28 @@ export default function LoginPage() {
     setLoading(true)
 
     try {
-      let res = await fetch("http://127.0.0.1:8000/api/auth/login", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          email: email.trim(),
-          password,
-        }),
-      })
-
-      let data = await res.json()
-
-      // Backward-compatibility fallback if backend serializer expects username.
-      if (!res.ok && typeof data === "object" && data) {
-        const usernameError = (data as Record<string, unknown>).username
-        const requiresUsername =
-          (Array.isArray(usernameError) && typeof usernameError[0] === "string" && usernameError[0].toLowerCase().includes("required")) ||
-          (typeof usernameError === "string" && usernameError.toLowerCase().includes("required"))
-
+      const trimmedEmail = email.trim()
+      let data
+      try {
+        data = await backendLogin({ email: trimmedEmail, password })
+      } catch (err) {
+        // Backward-compatibility fallback if backend serializer expects username instead of email.
+        const message = err instanceof Error ? err.message : "Login failed."
+        const lower = message.toLowerCase()
+        const requiresUsername = lower.includes("username") && lower.includes("required")
         if (requiresUsername) {
-          res = await fetch("http://127.0.0.1:8000/api/auth/login", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              username: email.trim(),
-              password,
-            }),
-          })
-          data = await res.json()
+          data = await backendLogin({ username: trimmedEmail, password })
+        } else {
+          throw err
         }
       }
 
-      if (!res.ok) {
-        const message = getErrorMessage(data)
-        const lower = message.toLowerCase()
-        const needsOtp =
-          lower.includes("verify") || lower.includes("otp") || lower.includes("not verified")
-        if (needsOtp) {
-          router.push(`/auth/verify-otp?email=${encodeURIComponent(email.trim())}&from=login`)
-          return
-        }
-        throw new Error(message)
+      const lower = String((data as any)?.error ?? "").toLowerCase()
+      const needsOtp =
+        lower.includes("verify") || lower.includes("otp") || lower.includes("not verified")
+      if (needsOtp) {
+        router.push(`/auth/verify-otp?email=${encodeURIComponent(trimmedEmail)}&from=login`)
+        return
       }
 
       // Store token for future authenticated requests
@@ -114,7 +95,7 @@ export default function LoginPage() {
 
       const role = (data.user?.role || data.role || "TENANT") as string
       const sessionEmail = data.user?.email || email.trim()
-      const sessionName = data.user?.full_name || data.user?.fullName || data.username || sessionEmail.split("@")[0] || "User"
+      const sessionName = data.user?.full_name || data.username || sessionEmail.split("@")[0] || "User"
 
       saveSession({
         token: data.token || "",
@@ -124,13 +105,23 @@ export default function LoginPage() {
           fullName: String(sessionName),
           email: String(sessionEmail),
           role: mapRoleForSession(role),
-          createdAt: String(data.user?.created_at ?? data.user?.createdAt ?? new Date().toISOString()),
+          createdAt: String(data.user?.created_at ?? new Date().toISOString()),
         },
       })
 
       // Redirect based on role
       router.push(next || redirectForRole(role))
     } catch (err) {
+      if (err instanceof ApiError) {
+        const lower = err.message.toLowerCase()
+        const needsOtp =
+          lower.includes("verify") || lower.includes("otp") || lower.includes("not verified")
+        if (needsOtp) {
+          router.push(`/auth/verify-otp?email=${encodeURIComponent(email.trim())}&from=login`)
+          setLoading(false)
+          return
+        }
+      }
       setError(err instanceof Error ? err.message : "Login failed.")
     } finally {
       setLoading(false)
@@ -156,26 +147,49 @@ export default function LoginPage() {
 
               {/* Email */}
               <div>
-                <label className="block text-sm font-semibold mb-2">Email</label>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@example.com"
-                  className="w-full px-4 py-3 border rounded-lg"
-                />
+                <label htmlFor="login-email" className="block text-sm font-semibold mb-2">Email</label>
+                <div className="relative">
+                  <Mail
+                    size={18}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                  />
+                  <input
+                    id="login-email"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="you@example.com"
+                    className="w-full px-4 py-3 border rounded-lg pl-10"
+                  />
+                </div>
               </div>
 
               {/* Password */}
               <div>
-                <label className="block text-sm font-semibold mb-2">Password</label>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="w-full px-4 py-3 border rounded-lg"
-                />
+                <label htmlFor="login-password" className="block text-sm font-semibold mb-2">Password</label>
+                <div className="relative">
+                  <Lock
+                    size={18}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                  />
+                  <input
+                    id="login-password"
+                    type={showPassword ? "text" : "password"}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className="w-full px-4 py-3 border rounded-lg pl-10 pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((v) => !v)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                    disabled={loading}
+                  >
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
               </div>
 
               {/* Error */}
@@ -195,6 +209,13 @@ export default function LoginPage() {
               <p className="text-sm text-center">
                 Don't have an account?{" "}
                 <Link href="/auth/register" className="underline">Create one</Link>
+              </p>
+
+              <p className="text-sm text-center">
+                Forgot your password?{" "}
+                <Link href={`/auth/password-reset?email=${encodeURIComponent(email.trim())}`} className="underline">
+                  Reset it
+                </Link>
               </p>
 
             </CardContent>

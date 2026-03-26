@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { motion } from "framer-motion"
 import { AuthAlertBanner } from "@/components/auth/AuthAlertBanner"
+import { backendResendOtp, backendVerifyEmail } from "@/lib/api/auth"
 
 function getErrorMessage(data: unknown, fallback: string) {
   if (!data || typeof data !== "object") return fallback
@@ -40,19 +41,10 @@ export default function VerifyOTPPage() {
     setLoading(true)
 
     try {
-      const res = await fetch("http://127.0.0.1:8000/api/auth/verify-email/", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: email.trim(),
-          otp: otp.trim(),
-        }),
+      const data = await backendVerifyEmail({
+        email: email.trim(),
+        otp: otp.trim(),
       })
-
-      const data = await res.json()
-      if (!res.ok) {
-        throw new Error(getErrorMessage(data, "Verification failed"))
-      }
 
       setSuccess("Email verified successfully. Redirecting to sign in...")
 
@@ -75,16 +67,7 @@ export default function VerifyOTPPage() {
     setResending(true)
 
     try {
-      const res = await fetch("http://127.0.0.1:8000/api/auth/resend-otp/", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: email.trim() }),
-      })
-
-      const data = await res.json()
-      if (!res.ok) {
-        throw new Error(getErrorMessage(data, "Failed to resend OTP"))
-      }
+      await backendResendOtp({ email: email.trim() })
 
       setInfo("A fresh OTP has been sent. Check your inbox and spam folder.")
     } catch (err) {

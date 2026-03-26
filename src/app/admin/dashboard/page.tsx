@@ -24,20 +24,23 @@ import {
   ArrowDownRight,
 } from "lucide-react"
 import {
-  getAdminDisputes,
-  getAdminStats,
-  getAdminUsers,
-  getAdminVerifications,
   seedAdminDemoDataIfEmpty,
+  updateAdminDispute,
+  getAdminDisputes,
   type AdminDispute,
   type AdminStats,
   type AdminUser,
   type AdminVerification,
-  updateAdminDispute,
-  updateAdminUser,
-  updateAdminVerification,
 } from "@/lib/admin-storage"
 import { requireAuth } from "@/lib/route-guards"
+import {
+  adminDashboardAnalytics,
+  adminListPendingUsers,
+  adminListUsers,
+  adminRejectUser,
+  adminSuspendUser,
+  adminVerifyUser,
+} from "@/lib/api/admin"
 
 export default function AdminDashboard() {
   const router = useRouter()
@@ -64,10 +67,101 @@ export default function AdminDashboard() {
       return
     }
     seedAdminDemoDataIfEmpty()
-    setStats(getAdminStats())
-    setRecentUsers(getAdminUsers())
-    setPendingVerifications(getAdminVerifications())
-    setDisputes(getAdminDisputes())
+
+    const load = async () => {
+      try {
+        const [analytics, users, pending] = await Promise.all([
+          adminDashboardAnalytics(),
+          adminListUsers(),
+          adminListPendingUsers(),
+        ])
+
+        // Map backend analytics to existing dashboard shape.
+        const totalTenants = (analytics as any)?.total_tenants ?? 0
+        const totalLandlords = (analytics as any)?.total_landlords ?? 0
+        const pendingVerificationsCount = (analytics as any)?.pending_verifications ?? 0
+        const totalUsers = totalTenants + totalLandlords
+
+        setStats({
+          totalUsers,
+          totalLandlords,
+          totalTenants,
+          totalProperties: 0,
+          totalUnits: 0,
+          occupancyRate: 0,
+          totalRevenue: 0,
+          revenueGrowth: 0,
+          // keep pending count indirectly via pendingVerifications array
+        })
+
+        const mapRole = (role?: string): AdminUser["type"] => {
+          const r = (role ?? "").toLowerCase()
+          if (r.includes("landlord")) return "landlord"
+          return "tenant"
+        }
+
+        const toAdminUser = (u: any): AdminUser => {
+          const verificationStatus = (u.verification_status ?? "").toString().toLowerCase()
+          const status = (u.status ?? "").toString().toLowerCase()
+          const created = (u.created_at ?? u.createdAt ?? new Date().toISOString()).toString()
+          const verified = verificationStatus === "approved" || Boolean(u.verified)
+
+          let mappedStatus: AdminUser["status"] = "active"
+          if (status === "suspended") mappedStatus = "suspended"
+          else if (verificationStatus === "pending" || verificationStatus === "under-review") mappedStatus = "pending"
+          else if (status === "pending") mappedStatus = "pending"
+
+          return {
+            id: String(u.id),
+            name: (u.full_name ?? u.fullName ?? u.username ?? u.email ?? "User").toString(),
+            email: (u.email ?? "").toString(),
+            type: mapRole(u.role),
+            status: mappedStatus,
+            joinedDate: created,
+            verified,
+          }
+        }
+
+        const mappedUsers = (users ?? []).map(toAdminUser)
+        setRecentUsers(mappedUsers)
+
+        const toAdminVerification = (u: any): AdminVerification => {
+          const verificationStatus = (u.verification_status ?? "").toString().toLowerCase()
+          const created = (u.created_at ?? u.createdAt ?? new Date().toISOString()).toString()
+
+          let mappedStatus: AdminVerification["status"] = "pending"
+          if (verificationStatus.includes("under")) mappedStatus = "under-review"
+          else if (verificationStatus === "approved") mappedStatus = "approved"
+          else if (verificationStatus === "rejected") mappedStatus = "rejected"
+
+          const docs = Array.isArray(u.documents) ? u.documents.map(String) : []
+          return {
+            id: String(u.id),
+            landlord: (u.full_name ?? u.fullName ?? u.username ?? u.email ?? "Landlord").toString(),
+            property: "N/A",
+            submittedDate: created,
+            documents: docs,
+            status: mappedStatus,
+            notes: (u.verification_notes ?? u.notes ?? "").toString() || undefined,
+          }
+        }
+
+        const mappedPending = (pending ?? []).map(toAdminVerification)
+        setPendingVerifications(mappedPending)
+
+        // Keep disputes demo data until backend dispute endpoints are connected.
+        setDisputes(getAdminDisputes())
+        // eslint-disable-next-line no-unused-vars
+        const _ignore = pendingVerificationsCount
+      } catch (err) {
+        setBanner({
+          title: "Failed to load admin data",
+          message: err instanceof Error ? err.message : "Unknown error",
+        })
+      }
+    }
+
+    load()
   }, [])
 
   const derived = useMemo(() => {
@@ -93,33 +187,94 @@ export default function AdminDashboard() {
     ]
   }, [stats])
 
-  const approveUser = (userId: string) => {
-    setRecentUsers(updateAdminUser(userId, { status: "active", verified: true }))
-    setBanner({ title: "User approved", message: "The user is now active and verified." })
+  const refreshLists = async () => {
+    const [users, pending] = await Promise.all([adminListUsers(), adminListPendingUsers()])
+
+    const mapRole = (role?: string): AdminUser["type"] => {
+      const r = (role ?? "").toLowerCase()
+      if (r.includes("landlord")) return "landlord"
+      return "tenant"
+    }
+
+    const toAdminUser = (u: any): AdminUser => {
+      const verificationStatus = (u.verification_status ?? "").toString().toLowerCase()
+      const status = (u.status ?? "").toString().toLowerCase()
+      const created = (u.created_at ?? u.createdAt ?? new Date().toISOString()).toString()
+      const verified = verificationStatus === "approved" || Boolean(u.verified)
+
+      let mappedStatus: AdminUser["status"] = "active"
+      if (status === "suspended") mappedStatus = "suspended"
+      else if (verificationStatus === "pending" || verificationStatus === "under-review") mappedStatus = "pending"
+      else if (status === "pending") mappedStatus = "pending"
+
+      return {
+        id: String(u.id),
+        name: (u.full_name ?? u.fullName ?? u.username ?? u.email ?? "User").toString(),
+        email: (u.email ?? "").toString(),
+        type: mapRole(u.role),
+        status: mappedStatus,
+        joinedDate: created,
+        verified,
+      }
+    }
+
+    const toAdminVerification = (u: any): AdminVerification => {
+      const verificationStatus = (u.verification_status ?? "").toString().toLowerCase()
+      const created = (u.created_at ?? u.createdAt ?? new Date().toISOString()).toString()
+
+      let mappedStatus: AdminVerification["status"] = "pending"
+      if (verificationStatus.includes("under")) mappedStatus = "under-review"
+      else if (verificationStatus === "approved") mappedStatus = "approved"
+      else if (verificationStatus === "rejected") mappedStatus = "rejected"
+
+      const docs = Array.isArray(u.documents) ? u.documents.map(String) : []
+      return {
+        id: String(u.id),
+        landlord: (u.full_name ?? u.fullName ?? u.username ?? u.email ?? "Landlord").toString(),
+        property: "N/A",
+        submittedDate: created,
+        documents: docs,
+        status: mappedStatus,
+        notes: (u.verification_notes ?? u.notes ?? "").toString() || undefined,
+      }
+    }
+
+    setRecentUsers((users ?? []).map(toAdminUser))
+    setPendingVerifications((pending ?? []).map(toAdminVerification))
   }
 
-  const suspendUser = (userId: string) => {
-    setRecentUsers(updateAdminUser(userId, { status: "suspended" }))
-    setBanner({ title: "User suspended", message: "The user account has been suspended." })
+  const approveUser = async (userId: string) => {
+    await adminVerifyUser(userId)
+    setBanner({ title: "User approved", message: "Verification approved successfully." })
+    await refreshLists()
+  }
+
+  const suspendUser = async (userId: string) => {
+    await adminSuspendUser(userId)
+    setBanner({ title: "User suspended", message: "User suspended successfully." })
+    await refreshLists()
   }
 
   const markVerificationReview = (id: string) => {
-    setPendingVerifications(updateAdminVerification(id, { status: "under-review" }))
-    setBanner({ title: "Marked as under review", message: "Verification is now in review state." })
+    // Backend currently only exposes verify/reject/suspend operations in the snippet.
+    setBanner({ title: "Not supported", message: "Marking under-review isn't wired to backend yet." })
+    void id
   }
 
-  const approveVerification = (id: string) => {
-    setPendingVerifications(updateAdminVerification(id, { status: "approved", notes: verifyNotes.trim() || undefined }))
+  const approveVerification = async (id: string) => {
+    await adminVerifyUser(id, { verification_notes: verifyNotes.trim() || undefined })
     setVerifyNotes("")
     setSelectedVerification(null)
-    setBanner({ title: "Verification approved", message: "The landlord verification has been approved." })
+    setBanner({ title: "Verification approved", message: "Landlord verification has been approved." })
+    await refreshLists()
   }
 
-  const rejectVerification = (id: string) => {
-    setPendingVerifications(updateAdminVerification(id, { status: "rejected", notes: rejectReason.trim() || undefined }))
+  const rejectVerification = async (id: string) => {
+    await adminRejectUser(id, { verification_notes: rejectReason.trim() || undefined })
     setRejectReason("")
     setSelectedVerification(null)
-    setBanner({ title: "Verification rejected", message: "The landlord verification was rejected." })
+    setBanner({ title: "Verification rejected", message: "Landlord verification has been rejected." })
+    await refreshLists()
   }
 
   const investigateDispute = (id: string) => {
