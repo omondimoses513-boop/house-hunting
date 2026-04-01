@@ -26,7 +26,6 @@ import {
 import { PageRoutes } from "@/constants/page-routes"
 import {
   getLandlordBookings,
-  getLandlordProfile,
   getLandlordProperties,
   seedLandlordDemoDataIfEmpty,
   type LandlordBooking,
@@ -34,6 +33,9 @@ import {
   updateBookingStatus,
 } from "@/lib/landlord-storage"
 import { requireAuth } from "@/lib/route-guards"
+import { backendLandlordDashboard, type BackendLandlordDashboard } from "@/lib/api/dashboard"
+import { backendGetMyProfile } from "@/lib/api/users"
+import { ApiError } from "@/lib/api/client"
 
 export default function LandlordDashboard() {
   const router = useRouter()
@@ -44,8 +46,11 @@ export default function LandlordDashboard() {
   const [bookings, setBookings] = useState<LandlordBooking[]>([])
   const [selectedPropertyId, setSelectedPropertyId] = useState<string | null>(null)
   const [banner, setBanner] = useState<{ title: string; message: string } | null>(null)
-
-  const profile = useMemo(() => getLandlordProfile(), [])
+  const [backendStats, setBackendStats] = useState<BackendLandlordDashboard["stats"] | null>(null)
+  const [backendProfileName, setBackendProfileName] = useState<string>("")
+  const [verificationState, setVerificationState] = useState<"pending" | "rejected" | "verified" | "suspended" | null>(null)
+  const [localProfileName, setLocalProfileName] = useState("")
+  const [usingBackendData, setUsingBackendData] = useState(false)
 
   useEffect(() => {
     const auth = requireAuth({ role: "landlord" })
@@ -53,12 +58,68 @@ export default function LandlordDashboard() {
       router.replace(auth.redirectTo)
       return
     }
-    seedLandlordDemoDataIfEmpty()
-    const nextProperties = getLandlordProperties()
-    const nextBookings = getLandlordBookings()
-    setProperties(nextProperties)
-    setBookings(nextBookings)
-    setSelectedPropertyId(nextProperties[0]?.id ?? null)
+
+    const loadBackendDashboard = async () => {
+      try {
+        const me = await backendGetMyProfile()
+        const verification = (me.verification_status ?? "").toString().toUpperCase()
+        const status = (me.status ?? "").toString().toUpperCase()
+
+        if (status === "SUSPENDED") {
+          setVerificationState("suspended")
+          setBanner({
+            title: "Account suspended",
+            message: "Your landlord account is suspended. Please contact support for assistance.",
+          })
+          return
+        }
+
+        if (verification === "VERIFIED") setVerificationState("verified")
+        else if (verification === "REJECTED") setVerificationState("rejected")
+        else setVerificationState("pending")
+
+        if (verification && verification !== "VERIFIED") return
+
+        const data = await backendLandlordDashboard()
+        setUsingBackendData(true)
+        setBackendStats(data.stats ?? null)
+        setBackendProfileName(data.profile?.full_name ?? "")
+        // Backend-first mode: do not show local demo records.
+        setProperties([])
+        setBookings([])
+        setSelectedPropertyId(null)
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 403) {
+          setBanner({
+            title: "Access restricted",
+            message: "Landlord dashboard API requires a verified landlord account.",
+          })
+          setVerificationState("pending")
+          return
+        }
+        // Fallback mode: only here we load local demo data.
+        setUsingBackendData(false)
+        seedLandlordDemoDataIfEmpty()
+        const nextProperties = getLandlordProperties()
+        const nextBookings = getLandlordBookings()
+        setProperties(nextProperties)
+        setBookings(nextBookings)
+        setSelectedPropertyId(nextProperties[0]?.id ?? null)
+      }
+    }
+
+    void loadBackendDashboard()
+
+    // Read local fallback profile name only on client after mount
+    try {
+      const raw = localStorage.getItem("tyrent_landlord_profile_v1")
+      if (raw) {
+        const parsed = JSON.parse(raw) as { fullName?: string }
+        setLocalProfileName(parsed.fullName ?? "")
+      }
+    } catch {
+      // ignore parse/storage errors
+    }
   }, [])
 
   useEffect(() => {
@@ -92,6 +153,21 @@ export default function LandlordDashboard() {
   }, [properties])
 
   const stats = useMemo(() => {
+    if (backendStats) {
+      const occupiedUnits = Number(backendStats.occupied_units ?? 0)
+      const totalUnits = Number(backendStats.total_units ?? 0)
+      return {
+        totalProperties: Number(backendStats.total_apartments ?? 0),
+        totalUnits,
+        occupiedUnits,
+        vacantUnits: Number(backendStats.vacant_units ?? Math.max(totalUnits - occupiedUnits, 0)),
+        monthlyRevenue: 0,
+        revenueChange: 0,
+        pendingBookings: Number(backendStats.pending_bookings ?? 0),
+        activeLeases: occupiedUnits,
+      }
+    }
+
     const totalProperties = properties.length
     const allUnits = properties.flatMap((p) => p.units)
     const totalUnits = allUnits.length
@@ -128,12 +204,63 @@ export default function LandlordDashboard() {
     <div className="min-h-screen bg-background">
       <div className="pt-24 pb-16">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+          {verificationState && verificationState !== "verified" && (
+            <Card className="mb-8 border-0 shadow-xl">
+              <CardContent className="p-8">
+                <div className="flex items-start gap-4">
+                  <div
+                    className={`w-12 h-12 rounded-full flex items-center justify-center ${
+                      verificationState === "rejected" || verificationState === "suspended"
+                        ? "bg-red-100 dark:bg-red-950/30"
+                        : "bg-orange-100 dark:bg-orange-950/30"
+                    }`}
+                  >
+                    {verificationState === "rejected" || verificationState === "suspended" ? (
+                      <XCircle className="h-6 w-6 text-red-600" />
+                    ) : (
+                      <Clock className="h-6 w-6 text-orange-600" />
+                    )}
+                  </div>
+
+                  <div className="flex-1">
+                    <h2 className="text-2xl font-bold font-montserrat mb-2">
+                      {verificationState === "suspended"
+                        ? "Account Suspended"
+                        : verificationState === "rejected"
+                          ? "Verification Rejected"
+                          : "Verification Pending"}
+                    </h2>
+                    <p className="text-muted-foreground font-nunito mb-4">
+                      {verificationState === "suspended"
+                        ? "Your landlord account is suspended. Please contact support for assistance."
+                        : verificationState === "rejected"
+                          ? "Your landlord verification was rejected. Please update your documents from your profile and contact support."
+                          : "Your landlord account is under review. Full backend dashboard access will be enabled after admin approval."}
+                    </p>
+
+                    <div className="flex flex-wrap gap-3">
+                      <Button asChild className="tyrent-gradient text-white font-nunito">
+                        <Link href="/profile">Open Profile</Link>
+                      </Button>
+                      <Button asChild variant="outline" className="font-nunito bg-transparent">
+                        <a href="mailto:support@tyrent.com">Contact Support</a>
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* If not verified, stop here – hide the rest of the dashboard UI */}
+          {verificationState && verificationState !== "verified" ? null : (
+            <>
           {/* Header */}
           <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-8">
             <div>
               <h1 className="text-3xl font-bold text-foreground mb-2 font-montserrat">Landlord Dashboard</h1>
               <p className="text-muted-foreground font-nunito">
-                {profile?.fullName ? `Welcome back, ${profile.fullName}. ` : ""}
+                {(backendProfileName || localProfileName) ? `Welcome back, ${backendProfileName || localProfileName}. ` : ""}
                 Manage your properties and track performance
               </p>
             </div>
@@ -187,7 +314,9 @@ export default function LandlordDashboard() {
                   </div>
                   <p className="text-sm text-muted-foreground mb-1 font-nunito">Total Properties</p>
                   <p className="text-3xl font-bold text-foreground font-montserrat">{stats.totalProperties}</p>
-                  <p className="text-xs text-muted-foreground mt-2 font-nunito">{stats.totalUnits} total units</p>
+                  <p className="text-xs text-muted-foreground mt-2 font-nunito">
+                    {stats.totalUnits > 0 ? `${stats.totalUnits} total units` : "No properties added yet"}
+                  </p>
                 </CardContent>
               </Card>
             </motion.div>
@@ -244,7 +373,9 @@ export default function LandlordDashboard() {
                   </div>
                   <p className="text-sm text-muted-foreground mb-1 font-nunito">Pending Bookings</p>
                   <p className="text-3xl font-bold text-foreground font-montserrat">{stats.pendingBookings}</p>
-                  <p className="text-xs text-muted-foreground mt-2 font-nunito">Require your attention</p>
+                  <p className="text-xs text-muted-foreground mt-2 font-nunito">
+                    {stats.pendingBookings > 0 ? "Require your attention" : "No pending bookings"}
+                  </p>
                 </CardContent>
               </Card>
             </motion.div>
@@ -266,6 +397,17 @@ export default function LandlordDashboard() {
 
             {/* Properties Tab */}
             <TabsContent value="properties" className="space-y-6">
+              {computedProperties.length === 0 && (
+                <Card>
+                  <CardContent className="p-6">
+                    <p className="text-sm text-muted-foreground font-nunito">
+                      {usingBackendData
+                        ? "No properties found from backend yet."
+                        : "No properties available yet."}
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {computedProperties.map((property, index) => (
                   <motion.div
@@ -408,6 +550,11 @@ export default function LandlordDashboard() {
                   <h3 className="text-xl font-bold text-foreground mb-4 font-montserrat">Recent Booking Requests</h3>
 
                   <div className="space-y-4">
+                    {bookings.length === 0 && (
+                      <div className="p-4 border border-border rounded-lg text-sm text-muted-foreground font-nunito">
+                        {usingBackendData ? "No booking requests from backend yet." : "No booking requests yet."}
+                      </div>
+                    )}
                     {bookings.map((booking) => (
                       <div
                         key={booking.id}
@@ -548,6 +695,8 @@ export default function LandlordDashboard() {
               </div>
             </TabsContent>
           </Tabs>
+            </>
+          )}
         </div>
       </div>
     </div>

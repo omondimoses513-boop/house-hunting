@@ -5,7 +5,6 @@ export const PageRoutes = {
   PROFILE: "/profile",
 
   // Landlord routes
-  LANDLORD_REGISTER: "/landlord/register",
   LANDLORD_DASHBOARD: "/landlord/dashboard",
   LANDLORD_CREATE_PROPERTY: "/landlord/properties/new",
 

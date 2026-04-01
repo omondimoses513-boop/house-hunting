@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { PageRoutes } from "@/constants/page-routes"
 import { AuthAlertBanner } from "@/components/auth/AuthAlertBanner"
-import { Eye, EyeOff, IdCard, Lock, Mail, Phone, User, ChevronDown } from "lucide-react"
+import { Eye, EyeOff, FileText, IdCard, Lock, Mail, Phone, Upload, User, ChevronDown } from "lucide-react"
 import { backendRegister } from "@/lib/api/auth"
 
 type UserRole = "TENANT" | "LANDLORD"
@@ -44,6 +44,8 @@ export default function RegisterPage() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [nationalId, setNationalId] = useState("")
   const [nationalIdImage, setNationalIdImage] = useState<File | null>(null)
+  const [proofOfOwnership, setProofOfOwnership] = useState<File | null>(null)
+  const [kraPin, setKraPin] = useState<File | null>(null)
 
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
@@ -63,6 +65,17 @@ export default function RegisterPage() {
       return
     }
 
+    if (role === "LANDLORD") {
+      if (!fullName.trim() || !phone.trim() || !nationalId.trim()) {
+        setError("Landlord sign up requires full name, phone number and national ID.")
+        return
+      }
+      if (!nationalIdImage || !proofOfOwnership || !kraPin) {
+        setError("Landlord sign up requires National ID image, proof of ownership, and KRA PIN document.")
+        return
+      }
+    }
+
     setLoading(true)
 
     try {
@@ -80,6 +93,12 @@ export default function RegisterPage() {
         formData.append("national_id", nationalId)
         if (nationalIdImage) {
           formData.append("national_id_image", nationalIdImage)
+        }
+        if (proofOfOwnership) {
+          formData.append("proof_of_ownership", proofOfOwnership)
+        }
+        if (kraPin) {
+          formData.append("kra_pin", kraPin)
         }
       }
 
@@ -201,7 +220,8 @@ export default function RegisterPage() {
               </div>
 
               {role === "LANDLORD" && (
-                <>
+                <div className="rounded-xl border border-border bg-muted/30 p-4 space-y-4">
+                  <p className="text-sm font-semibold">Landlord verification details</p>
                   <div className="relative">
                     <IdCard
                       size={18}
@@ -217,14 +237,45 @@ export default function RegisterPage() {
                     />
                   </div>
 
-                  <input
-                    type="file"
-                    onChange={(e) =>
-                      setNationalIdImage(e.target.files?.[0] || null)
-                    }
-                    className="w-full px-4 py-3 border rounded-lg"
-                  />
-                </>
+                  <label className="block text-sm font-medium">
+                    National ID image *
+                    <div className="mt-2 relative">
+                      <Upload size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                      <input
+                        type="file"
+                        accept=".jpg,.jpeg,.png,.pdf"
+                        onChange={(e) => setNationalIdImage(e.target.files?.[0] || null)}
+                        className="w-full px-4 py-3 border rounded-lg pl-10"
+                      />
+                    </div>
+                  </label>
+
+                  <label className="block text-sm font-medium">
+                    Proof of ownership *
+                    <div className="mt-2 relative">
+                      <FileText size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                      <input
+                        type="file"
+                        accept=".jpg,.jpeg,.png,.pdf"
+                        onChange={(e) => setProofOfOwnership(e.target.files?.[0] || null)}
+                        className="w-full px-4 py-3 border rounded-lg pl-10"
+                      />
+                    </div>
+                  </label>
+
+                  <label className="block text-sm font-medium">
+                    KRA PIN document *
+                    <div className="mt-2 relative">
+                      <FileText size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                      <input
+                        type="file"
+                        accept=".jpg,.jpeg,.png,.pdf"
+                        onChange={(e) => setKraPin(e.target.files?.[0] || null)}
+                        className="w-full px-4 py-3 border rounded-lg pl-10"
+                      />
+                    </div>
+                  </label>
+                </div>
               )}
 
               <div className="relative">

@@ -21,6 +21,7 @@ import {
   Sun,
   Moon,
   LayoutDashboard,
+  CircleUserRound,
 } from "lucide-react"
 import { TyrentLogoMark } from "@/components/TyrentLogo"
 
@@ -115,7 +116,6 @@ export default function Header() {
             {[
               { href: "/", label: "Home" },
               { href: "/properties", label: "Properties" },
-              { href: "/landlord/register", label: "Become a Landlord" },
               { href: "/tenant/dashboard", label: "My Bookings" },
             ].map(({ href, label }) => (
               <Link key={href} href={href}>
@@ -138,6 +138,18 @@ export default function Header() {
               <>
                 {sessionRole ? (
                   <>
+                    <Button
+                      asChild
+                      variant="outline"
+                      className={`font-nunito bg-transparent ${
+                        scrolled || isTransparent ? "" : "border-white/30 text-white hover:bg-white/10"
+                      }`}
+                    >
+                      <Link href="/profile">
+                        <CircleUserRound className="h-4 w-4 mr-2" />
+                        Profile
+                      </Link>
+                    </Button>
                     <Button
                       asChild
                       variant="outline"
@@ -222,17 +234,31 @@ export default function Header() {
             </Button>
 
             {/* Favorites */}
-            <Link href="/tenant/dashboard">
-              <Button
-                variant="ghost"
-                size="icon"
-                className={`rounded-full transition-colors duration-300 ${
-                  scrolled || isTransparent ? "hover:bg-accent" : "hover:bg-white/10"
-                }`}
-              >
-                <Heart className={`h-5 w-5 ${iconColor}`} />
-              </Button>
-            </Link>
+            {sessionRole === "landlord" || sessionRole === "admin" ? (
+              <Link href={dashboardHref}>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className={`rounded-full transition-colors duration-300 ${
+                    scrolled || isTransparent ? "hover:bg-accent" : "hover:bg-white/10"
+                  }`}
+                >
+                  <LayoutDashboard className={`h-5 w-5 ${iconColor}`} />
+                </Button>
+              </Link>
+            ) : (
+              <Link href="/tenant/dashboard">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className={`rounded-full transition-colors duration-300 ${
+                    scrolled || isTransparent ? "hover:bg-accent" : "hover:bg-white/10"
+                  }`}
+                >
+                  <Heart className={`h-5 w-5 ${iconColor}`} />
+                </Button>
+              </Link>
+            )}
 
             {/* User Menu */}
             <div
@@ -286,7 +312,6 @@ export default function Header() {
                 {[
                   { href: "/", label: "Home", Icon: Home },
                   { href: "/properties", label: "Browse Properties", Icon: Search },
-                  { href: "/landlord/register", label: "Become a Landlord", Icon: Building2 },
                   { href: "/tenant/dashboard", label: "My Bookings", Icon: LayoutDashboard },
                 ].map(({ href, label, Icon }) => (
                   <Link
@@ -307,12 +332,21 @@ export default function Header() {
                   <span className="text-sm font-semibold text-muted-foreground font-montserrat">Quick Actions</span>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
-                  <Link href="/tenant/dashboard">
-                    <button className="flex flex-col items-center justify-center p-4 rounded-xl border border-border hover:bg-accent transition-colors w-full">
-                      <Heart className="h-6 w-6 text-muted-foreground mb-2" />
-                      <span className="text-xs font-medium font-nunito">Favorites</span>
-                    </button>
-                  </Link>
+                  {sessionRole === "landlord" || sessionRole === "admin" ? (
+                    <Link href={dashboardHref}>
+                      <button className="flex flex-col items-center justify-center p-4 rounded-xl border border-border hover:bg-accent transition-colors w-full">
+                        <LayoutDashboard className="h-6 w-6 text-muted-foreground mb-2" />
+                        <span className="text-xs font-medium font-nunito">Dashboard</span>
+                      </button>
+                    </Link>
+                  ) : (
+                    <Link href="/tenant/dashboard">
+                      <button className="flex flex-col items-center justify-center p-4 rounded-xl border border-border hover:bg-accent transition-colors w-full">
+                        <Heart className="h-6 w-6 text-muted-foreground mb-2" />
+                        <span className="text-xs font-medium font-nunito">Favorites</span>
+                      </button>
+                    </Link>
+                  )}
                   <button className="flex flex-col items-center justify-center p-4 rounded-xl border border-border hover:bg-accent transition-colors">
                     <Bell className="h-6 w-6 text-muted-foreground mb-2" />
                     <span className="text-xs font-medium font-nunito">Notifications</span>
@@ -324,6 +358,18 @@ export default function Header() {
               <div className="space-y-3 px-4">
                 {sessionRole ? (
                   <>
+                    <Button
+                      size="lg"
+                      variant="outline"
+                      className="w-full justify-center font-nunito bg-transparent"
+                      asChild
+                      onClick={() => setIsMenuOpen(false)}
+                    >
+                      <Link href="/profile">
+                        <CircleUserRound className="h-4 w-4 mr-2" />
+                        Profile
+                      </Link>
+                    </Button>
                     <Button
                       size="lg"
                       variant="outline"

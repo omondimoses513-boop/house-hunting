@@ -42,10 +42,83 @@ import {
   adminVerifyUser,
 } from "@/lib/api/admin"
 
+function getDefaultApiBase() {
+  return (process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:8000").replace(/\/+$/, "")
+}
+
+function absolutizeApiUrl(url: string, apiBase: string) {
+  if (!url || typeof url !== "string") return url
+  return url.startsWith("http://") || url.startsWith("https://")
+    ? url
+    : `${apiBase}${url.startsWith("/") ? "" : "/"}${url}`
+}
+
+type VerificationMetaEntry = {
+  nationalId?: string
+  phone?: string
+  documents: Array<{ label: string; url: string }>
+}
+
+/** Maps Django user JSON (e.g. list + pending) to modal fields; absolutizes /media/... paths. */
+function buildVerificationMetaFromUser(u: Record<string, unknown>, apiBase: string): VerificationMetaEntry {
+  const abs = (url: string) => absolutizeApiUrl(url, apiBase)
+  const docs: Array<{ label: string; url: string }> = []
+  const pushIf = (key: string, label: string) => {
+    const v = u[key]
+    if (typeof v === "string" && v.trim()) docs.push({ label, url: abs(v) })
+  }
+  pushIf("national_id_image", "National ID Image")
+  pushIf("proof_of_ownership", "Proof of Ownership")
+  pushIf("kra_pin", "KRA PIN")
+  pushIf("profile_picture", "Profile Picture")
+
+  const nid = u.national_id
+  const phone = u.phone_number
+  return {
+    nationalId:
+      typeof nid === "string" && nid
+        ? nid
+        : typeof nid === "number"
+          ? String(nid)
+          : undefined,
+    phone: typeof phone === "string" && phone ? phone : undefined,
+    documents: docs,
+  }
+}
+
+function mergeVerificationMeta(
+  users: unknown[],
+  pending: unknown[],
+  apiBase: string,
+): Record<string, VerificationMetaEntry> {
+  const out: Record<string, VerificationMetaEntry> = {}
+  for (const raw of users ?? []) {
+    if (raw && typeof raw === "object" && "id" in raw) {
+      out[String((raw as { id: unknown }).id)] = buildVerificationMetaFromUser(
+        raw as Record<string, unknown>,
+        apiBase,
+      )
+    }
+  }
+  for (const raw of pending ?? []) {
+    if (raw && typeof raw === "object" && "id" in raw) {
+      out[String((raw as { id: unknown }).id)] = buildVerificationMetaFromUser(
+        raw as Record<string, unknown>,
+        apiBase,
+      )
+    }
+  }
+  return out
+}
+
 export default function AdminDashboard() {
   const router = useRouter()
   const [selectedPeriod, setSelectedPeriod] = useState("month")
   const [banner, setBanner] = useState<{ title: string; message: string } | null>(null)
+
+  const API_BASE = getDefaultApiBase()
+  const absolutizeUrl = (url: string) => absolutizeApiUrl(url, API_BASE)
+  const isLikelyImageUrl = (url: string) => /\.(png|jpe?g|webp|gif|svg)(\?.*)?$/i.test(url)
 
   const [stats, setStats] = useState<AdminStats | null>(null)
   const [recentUsers, setRecentUsers] = useState<AdminUser[]>([])
@@ -55,6 +128,7 @@ export default function AdminDashboard() {
   const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null)
   const [selectedVerification, setSelectedVerification] = useState<AdminVerification | null>(null)
   const [selectedDispute, setSelectedDispute] = useState<AdminDispute | null>(null)
+  const [verificationMeta, setVerificationMeta] = useState<Record<string, VerificationMetaEntry>>({})
 
   const [verifyNotes, setVerifyNotes] = useState("")
   const [rejectReason, setRejectReason] = useState("")
@@ -104,7 +178,8 @@ export default function AdminDashboard() {
           const verificationStatus = (u.verification_status ?? "").toString().toLowerCase()
           const status = (u.status ?? "").toString().toLowerCase()
           const created = (u.created_at ?? u.createdAt ?? new Date().toISOString()).toString()
-          const verified = verificationStatus === "approved" || Boolean(u.verified)
+          const verified =
+            verificationStatus === "verified" || verificationStatus === "approved" || Boolean(u.verified)
 
           let mappedStatus: AdminUser["status"] = "active"
           if (status === "suspended") mappedStatus = "suspended"
@@ -122,6 +197,8 @@ export default function AdminDashboard() {
           }
         }
 
+        setVerificationMeta(mergeVerificationMeta(users ?? [], pending ?? [], API_BASE))
+
         const mappedUsers = (users ?? []).map(toAdminUser)
         setRecentUsers(mappedUsers)
 
@@ -131,10 +208,11 @@ export default function AdminDashboard() {
 
           let mappedStatus: AdminVerification["status"] = "pending"
           if (verificationStatus.includes("under")) mappedStatus = "under-review"
-          else if (verificationStatus === "approved") mappedStatus = "approved"
+          else if (verificationStatus === "verified" || verificationStatus === "approved") mappedStatus = "approved"
           else if (verificationStatus === "rejected") mappedStatus = "rejected"
 
           const docs = Array.isArray(u.documents) ? u.documents.map(String) : []
+
           return {
             id: String(u.id),
             landlord: (u.full_name ?? u.fullName ?? u.username ?? u.email ?? "Landlord").toString(),
@@ -200,7 +278,8 @@ export default function AdminDashboard() {
       const verificationStatus = (u.verification_status ?? "").toString().toLowerCase()
       const status = (u.status ?? "").toString().toLowerCase()
       const created = (u.created_at ?? u.createdAt ?? new Date().toISOString()).toString()
-      const verified = verificationStatus === "approved" || Boolean(u.verified)
+      const verified =
+        verificationStatus === "verified" || verificationStatus === "approved" || Boolean(u.verified)
 
       let mappedStatus: AdminUser["status"] = "active"
       if (status === "suspended") mappedStatus = "suspended"
@@ -224,10 +303,11 @@ export default function AdminDashboard() {
 
       let mappedStatus: AdminVerification["status"] = "pending"
       if (verificationStatus.includes("under")) mappedStatus = "under-review"
-      else if (verificationStatus === "approved") mappedStatus = "approved"
+      else if (verificationStatus === "verified" || verificationStatus === "approved") mappedStatus = "approved"
       else if (verificationStatus === "rejected") mappedStatus = "rejected"
 
       const docs = Array.isArray(u.documents) ? u.documents.map(String) : []
+
       return {
         id: String(u.id),
         landlord: (u.full_name ?? u.fullName ?? u.username ?? u.email ?? "Landlord").toString(),
@@ -239,6 +319,7 @@ export default function AdminDashboard() {
       }
     }
 
+    setVerificationMeta(mergeVerificationMeta(users ?? [], pending ?? [], API_BASE))
     setRecentUsers((users ?? []).map(toAdminUser))
     setPendingVerifications((pending ?? []).map(toAdminVerification))
   }
@@ -813,6 +894,47 @@ export default function AdminDashboard() {
                       )}
                     </div>
 
+                    {(verificationMeta[selectedUser.id]?.nationalId || verificationMeta[selectedUser.id]?.phone) && (
+                      <div className="mb-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {verificationMeta[selectedUser.id]?.nationalId && (
+                          <div className="rounded-lg border border-border p-3">
+                            <p className="text-xs text-muted-foreground font-nunito">National ID</p>
+                            <p className="text-sm font-medium font-nunito">
+                              {verificationMeta[selectedUser.id]?.nationalId}
+                            </p>
+                          </div>
+                        )}
+                        {verificationMeta[selectedUser.id]?.phone && (
+                          <div className="rounded-lg border border-border p-3">
+                            <p className="text-xs text-muted-foreground font-nunito">Phone Number</p>
+                            <p className="text-sm font-medium font-nunito">
+                              {verificationMeta[selectedUser.id]?.phone}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    <div className="flex flex-wrap gap-2 mb-4">
+                      {(verificationMeta[selectedUser.id]?.documents ?? []).map((doc) => (
+                        <Button
+                          key={`${doc.label}-${doc.url}`}
+                          variant="outline"
+                          size="sm"
+                          className="font-nunito bg-transparent"
+                          asChild
+                        >
+                          <a href={absolutizeUrl(doc.url)} target="_blank" rel="noreferrer">
+                            <FileText className="h-4 w-4 mr-1" />
+                            {doc.label}
+                          </a>
+                        </Button>
+                      ))}
+                      {(verificationMeta[selectedUser.id]?.documents ?? []).length === 0 && (
+                        <p className="text-xs text-muted-foreground font-nunito">No document links available.</p>
+                      )}
+                    </div>
+
                     <p className="text-sm text-muted-foreground font-nunito">Joined: {selectedUser.joinedDate}</p>
 
                     <div className="mt-6 flex items-center justify-end gap-2">
@@ -877,6 +999,28 @@ export default function AdminDashboard() {
                       <Badge variant="outline">Submitted: {selectedVerification.submittedDate}</Badge>
                     </div>
 
+                    {(verificationMeta[selectedVerification.id]?.nationalId ||
+                      verificationMeta[selectedVerification.id]?.phone) && (
+                      <div className="mb-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {verificationMeta[selectedVerification.id]?.nationalId && (
+                          <div className="rounded-lg border border-border p-3">
+                            <p className="text-xs text-muted-foreground font-nunito">National ID</p>
+                            <p className="text-sm font-medium font-nunito">
+                              {verificationMeta[selectedVerification.id]?.nationalId}
+                            </p>
+                          </div>
+                        )}
+                        {verificationMeta[selectedVerification.id]?.phone && (
+                          <div className="rounded-lg border border-border p-3">
+                            <p className="text-xs text-muted-foreground font-nunito">Phone Number</p>
+                            <p className="text-sm font-medium font-nunito">
+                              {verificationMeta[selectedVerification.id]?.phone}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     <div className="flex flex-wrap gap-2 mb-4">
                       {selectedVerification.documents.map((doc) => (
                         <Badge key={doc} variant="outline" className="font-nunito">
@@ -885,6 +1029,40 @@ export default function AdminDashboard() {
                         </Badge>
                       ))}
                     </div>
+
+                    <div className="flex flex-wrap gap-2 mb-4">
+                      {(verificationMeta[selectedVerification.id]?.documents ?? []).map((doc) => (
+                        <Button key={`${doc.label}-${doc.url}`} variant="outline" size="sm" className="font-nunito bg-transparent" asChild>
+                          <a href={absolutizeUrl(doc.url)} target="_blank" rel="noreferrer">
+                            <FileText className="h-4 w-4 mr-1" />
+                            {doc.label}
+                          </a>
+                        </Button>
+                      ))}
+                      {(verificationMeta[selectedVerification.id]?.documents ?? []).length === 0 && (
+                        <p className="text-xs text-muted-foreground font-nunito">No uploaded document links available yet.</p>
+                      )}
+                    </div>
+
+                    {(verificationMeta[selectedVerification.id]?.documents ?? []).some((d) => isLikelyImageUrl(d.url)) && (
+                      <div className="mb-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {(verificationMeta[selectedVerification.id]?.documents ?? [])
+                          .filter((d) => isLikelyImageUrl(d.url))
+                          .slice(0, 4)
+                          .map((d) => (
+                            <a
+                              key={`preview-${d.label}-${d.url}`}
+                              href={absolutizeUrl(d.url)}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="rounded-lg border border-border overflow-hidden hover:opacity-90 transition-opacity"
+                            >
+                              <img src={absolutizeUrl(d.url)} alt={d.label} className="w-full h-40 object-cover" />
+                              <div className="p-2 text-xs text-muted-foreground font-nunito">{d.label}</div>
+                            </a>
+                          ))}
+                      </div>
+                    )}
 
                     <div className="space-y-2">
                       <label className="block text-sm font-semibold text-foreground font-montserrat">Notes</label>

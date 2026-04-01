@@ -40,6 +40,7 @@ import {
   type TenantPayment,
 } from "@/lib/tenant-storage"
 import { requireAuth } from "@/lib/route-guards"
+import { backendTenantDashboard, type BackendTenantDashboard } from "@/lib/api/dashboard"
 
 function daysUntil(dateIso: string) {
   const target = new Date(dateIso)
@@ -88,6 +89,7 @@ export default function TenantDashboard() {
   const [messageBody, setMessageBody] = useState("")
 
   const [detailsRequest, setDetailsRequest] = useState<TenantMaintenanceRequest | null>(null)
+  const [backendTenant, setBackendTenant] = useState<BackendTenantDashboard | null>(null)
 
   useEffect(() => {
     const auth = requireAuth({ role: "tenant" })
@@ -95,11 +97,25 @@ export default function TenantDashboard() {
       router.replace(auth.redirectTo)
       return
     }
-    seedTenantDemoDataIfEmpty()
-    setLease(getTenantLease())
-    setPaymentHistory(getTenantPayments())
-    setMaintenanceRequests(getTenantMaintenanceRequests())
-    setDocuments(getTenantDocuments())
+    const loadTenantData = async () => {
+      try {
+        const data = await backendTenantDashboard()
+        setBackendTenant(data)
+        // Backend-first mode: avoid showing seeded local demo/bulk data.
+        setLease(null)
+        setPaymentHistory([])
+        setMaintenanceRequests([])
+        setDocuments([])
+      } catch {
+        // Fallback to local demo storage only if backend tenant endpoint is unavailable.
+        seedTenantDemoDataIfEmpty()
+        setLease(getTenantLease())
+        setPaymentHistory(getTenantPayments())
+        setMaintenanceRequests(getTenantMaintenanceRequests())
+        setDocuments(getTenantDocuments())
+      }
+    }
+    void loadTenantData()
   }, [])
 
   const currentLease = lease
@@ -209,7 +225,10 @@ export default function TenantDashboard() {
           {/* Header */}
           <div className="mb-8">
             <h1 className="text-3xl font-bold text-foreground mb-2 font-montserrat">Tenant Dashboard</h1>
-            <p className="text-muted-foreground font-nunito">Manage your rental and stay connected</p>
+            <p className="text-muted-foreground font-nunito">
+              {backendTenant?.user?.full_name ? `Welcome back, ${backendTenant.user.full_name}. ` : ""}
+              Manage your rental and stay connected
+            </p>
           </div>
 
           {banner && (
@@ -392,12 +411,18 @@ export default function TenantDashboard() {
                       <div className="w-12 h-12 rounded-lg tyrent-gradient flex items-center justify-center mb-4">
                         <DollarSign className="h-6 w-6 text-white" />
                       </div>
-                      <p className="text-sm text-muted-foreground mb-1 font-nunito">Total Paid</p>
+                      <p className="text-sm text-muted-foreground mb-1 font-nunito">
+                        {backendTenant?.stats ? "Active Bookings" : "Total Paid"}
+                      </p>
                       <p className="text-3xl font-bold text-foreground font-montserrat">
-                        KES {(totalPaid / 1000).toFixed(0)}K
+                        {backendTenant?.stats?.active_bookings ?? (totalPaid / 1000).toFixed(0)}
                       </p>
                       <p className="text-xs text-muted-foreground mt-2 font-nunito">
-                        {paymentHistory.length} payments recorded
+                        {backendTenant?.stats
+                          ? (backendTenant.stats.active_bookings ?? 0) > 0
+                            ? "active bookings"
+                            : "No active bookings yet"
+                          : `${paymentHistory.length} payments recorded`}
                       </p>
                     </CardContent>
                   </Card>
@@ -409,10 +434,18 @@ export default function TenantDashboard() {
                       <div className="w-12 h-12 rounded-lg bg-green-500 flex items-center justify-center mb-4">
                         <CheckCircle2 className="h-6 w-6 text-white" />
                       </div>
-                      <p className="text-sm text-muted-foreground mb-1 font-nunito">Payment Status</p>
-                      <p className={`text-3xl font-bold font-montserrat ${paymentStatusColor}`}>{paymentStatusLabel}</p>
+                      <p className="text-sm text-muted-foreground mb-1 font-nunito">
+                        {backendTenant?.stats ? "Pending Bookings" : "Payment Status"}
+                      </p>
+                      <p className={`text-3xl font-bold font-montserrat ${backendTenant?.stats ? "text-foreground" : paymentStatusColor}`}>
+                        {backendTenant?.stats?.pending_bookings ?? paymentStatusLabel}
+                      </p>
                       <p className="text-xs text-muted-foreground mt-2 font-nunito">
-                        Next due: {currentLease?.nextPaymentDue ?? "--"}
+                        {backendTenant?.stats
+                          ? (backendTenant.stats.pending_bookings ?? 0) > 0
+                            ? `pending bookings: ${backendTenant.stats.pending_bookings ?? 0}`
+                            : "No pending bookings"
+                          : `Next due: ${currentLease?.nextPaymentDue ?? "--"}`}
                       </p>
                     </CardContent>
                   </Card>
@@ -424,9 +457,19 @@ export default function TenantDashboard() {
                       <div className="w-12 h-12 rounded-lg bg-orange-500 flex items-center justify-center mb-4">
                         <Wrench className="h-6 w-6 text-white" />
                       </div>
-                      <p className="text-sm text-muted-foreground mb-1 font-nunito">Maintenance</p>
-                      <p className="text-3xl font-bold text-foreground font-montserrat">{activeMaintenanceCount}</p>
-                      <p className="text-xs text-muted-foreground mt-2 font-nunito">Active requests</p>
+                      <p className="text-sm text-muted-foreground mb-1 font-nunito">
+                        {backendTenant?.stats ? "Past Bookings" : "Maintenance"}
+                      </p>
+                      <p className="text-3xl font-bold text-foreground font-montserrat">
+                        {backendTenant?.stats?.past_bookings ?? activeMaintenanceCount}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-2 font-nunito">
+                        {backendTenant?.stats
+                          ? (backendTenant.stats.past_bookings ?? 0) > 0
+                            ? "completed or cancelled"
+                            : "No past bookings"
+                          : "active requests"}
+                      </p>
                     </CardContent>
                   </Card>
                 </motion.div>
@@ -498,6 +541,7 @@ export default function TenantDashboard() {
                       variant="outline"
                       size="sm"
                       className="font-nunito bg-transparent"
+                      disabled={paymentHistory.length === 0}
                       onClick={() => {
                         const rows = paymentHistory
                           .map((p) => `${p.date}\tKES ${p.amount}\t${p.method}\t${p.reference}\t${p.status}`)
@@ -511,6 +555,11 @@ export default function TenantDashboard() {
                   </div>
 
                   <div className="space-y-4">
+                    {paymentHistory.length === 0 && (
+                      <div className="p-4 border border-border rounded-lg text-sm text-muted-foreground font-nunito">
+                        No payments made yet.
+                      </div>
+                    )}
                     {paymentHistory.map((payment) => (
                       <div
                         key={payment.id}
@@ -587,6 +636,15 @@ export default function TenantDashboard() {
               </div>
 
               <div className="space-y-4">
+                {maintenanceRequests.length === 0 && (
+                  <Card>
+                    <CardContent className="p-6">
+                      <p className="text-sm text-muted-foreground font-nunito">
+                        No maintenance requests yet.
+                      </p>
+                    </CardContent>
+                  </Card>
+                )}
                 {maintenanceRequests.map((request) => (
                   <Card key={request.id} className="tyrent-card-hover">
                     <CardContent className="p-6">
@@ -662,6 +720,11 @@ export default function TenantDashboard() {
                   <h3 className="text-xl font-bold text-foreground mb-6 font-montserrat">Your Documents</h3>
 
                   <div className="space-y-3">
+                    {documents.length === 0 && (
+                      <div className="p-4 border border-border rounded-lg text-sm text-muted-foreground font-nunito">
+                        No documents uploaded yet.
+                      </div>
+                    )}
                     {documents.map((doc) => (
                       <div
                         key={doc.id}

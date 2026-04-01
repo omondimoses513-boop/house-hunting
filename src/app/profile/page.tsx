@@ -10,9 +10,9 @@ import { Badge } from "@/components/ui/badge"
 import { AuthAlertBanner } from "@/components/auth/AuthAlertBanner"
 import { requireAuth } from "@/lib/route-guards"
 import { getSession, saveSession } from "@/lib/auth"
-import { backendGetProfileSmart, backendUpdateMyProfile, type BackendUserProfile } from "@/lib/api/users"
+import { backendGetProfileSmart, backendUpdateMyProfile, backendUpdateMyProfileForm, type BackendUserProfile } from "@/lib/api/users"
 import { PageRoutes } from "@/constants/page-routes"
-import { Mail, Phone, User } from "lucide-react"
+import { Mail, Phone, Upload, User } from "lucide-react"
 
 function displayRole(role?: string) {
   const r = (role || "").toUpperCase()
@@ -30,6 +30,7 @@ export default function ProfilePage() {
   const [profile, setProfile] = useState<BackendUserProfile | null>(null)
   const [fullName, setFullName] = useState("")
   const [phone, setPhone] = useState("")
+  const [profileImage, setProfileImage] = useState<File | null>(null)
 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -66,6 +67,13 @@ export default function ProfilePage() {
         full_name: fullName.trim(),
         phone_number: phone.trim(),
       })
+
+      if (profileImage) {
+        const formData = new FormData()
+        formData.append("profile_picture", profileImage)
+        await backendUpdateMyProfileForm(formData)
+      }
+
       setProfile(next)
       setSuccess("Profile updated.")
 
@@ -154,6 +162,19 @@ export default function ProfilePage() {
                           onChange={(e) => setPhone(e.target.value)}
                           className="w-full pl-10 pr-4 py-3 border border-input rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-ring font-nunito"
                           placeholder="+254 700 000 000"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-semibold mb-2 font-montserrat">Profile picture</label>
+                      <div className="relative">
+                        <Upload className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                        <input
+                          type="file"
+                          accept=".jpg,.jpeg,.png,.webp"
+                          onChange={(e) => setProfileImage(e.target.files?.[0] ?? null)}
+                          className="w-full pl-10 pr-4 py-3 border border-input rounded-lg bg-background font-nunito"
                         />
                       </div>
                     </div>

@@ -6,6 +6,11 @@ export type BackendAdminUser = {
   username?: string
   full_name?: string
   phone_number?: string
+  national_id?: string
+  national_id_image?: string
+  proof_of_ownership?: string
+  kra_pin?: string
+  profile_picture?: string
   role?: string
   status?: string
   verification_status?: string

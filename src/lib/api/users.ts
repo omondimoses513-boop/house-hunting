@@ -25,10 +25,11 @@ async function tryRequest<T>(fn: () => Promise<T>) {
 }
 
 export async function backendGetMyProfile() {
-  // Prefer request.user based endpoints if present
+  // Backend routes (users.urls_users):
+  //   path('me', user_profile),
   return tryRequest(() =>
     apiRequest<BackendUserProfile>({
-      path: "/api/users/profile",
+      path: "/api/users/me",
       method: "GET",
     }),
   )
@@ -42,20 +43,17 @@ export async function backendGetUserById(userId: string) {
 }
 
 export async function backendGetProfileSmart(userId?: string | null) {
-  // Try /api/users/profile first, then fallback to /api/users/{id} if needed.
-  try {
-    return await backendGetMyProfile()
-  } catch (err) {
-    const isNotFound = err instanceof ApiError && err.status === 404
-    if (isNotFound && userId) return await backendGetUserById(userId)
-    throw err
-  }
+  // Current backend exposes /api/users/me (and not /profile or /{id}).
+  // Keep the helper in case we later want to add id-based lookups.
+  void userId
+  return backendGetMyProfile()
 }
 
 export async function backendUpdateMyProfile(patch: Partial<BackendUserProfile>) {
-  // Prefer request.user based endpoint
+  // Backend routes (users.urls_users):
+  //   path('me/update', update_user_profile),
   return apiRequest<BackendUserProfile>({
-    path: "/api/users/profile",
+    path: "/api/users/me/update",
     method: "PATCH",
     body: patch,
   })
@@ -66,6 +64,14 @@ export async function backendUpdateUserById(userId: string, payload: Record<stri
     path: `/api/users/${encodeURIComponent(userId)}`,
     method: "PUT",
     body: payload,
+  })
+}
+
+export async function backendUpdateMyProfileForm(formData: FormData) {
+  return apiRequest<BackendUserProfile>({
+    path: "/api/users/me/update",
+    method: "PATCH",
+    formData,
   })
 }
 
