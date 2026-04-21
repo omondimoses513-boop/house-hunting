@@ -1,14 +1,74 @@
 "use client"
 
+import { useEffect, useMemo, useState } from "react"
 import { motion } from "framer-motion"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { CheckCircle2, Home, Mail, Calendar, MapPin, Download, ArrowRight } from "lucide-react"
+import { backendGetBooking, type BackendBooking } from "@/lib/api/bookings"
+import { backendListApartments, type BackendApartment } from "@/lib/api/properties"
+import { CheckCircle2, Home, Mail, Calendar, MapPin, Download, ArrowRight, Phone, User } from "lucide-react"
 
 export default function BookingConfirmation() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const bookingId = (searchParams.get("booking") || "").trim()
+  const [booking, setBooking] = useState<BackendBooking | null>(null)
+  const [apartmentList, setApartmentList] = useState<BackendApartment[]>([])
+
+  useEffect(() => {
+    let cancelled = false
+    const load = async () => {
+      if (!bookingId) return
+      try {
+        const [b, apartments] = await Promise.all([backendGetBooking(bookingId), backendListApartments().catch(() => [])])
+        if (!cancelled) {
+          setBooking(b)
+          setApartmentList(Array.isArray(apartments) ? apartments : [])
+        }
+      } catch {
+        if (!cancelled) {
+          setBooking(null)
+          setApartmentList([])
+        }
+      }
+    }
+    void load()
+    return () => {
+      cancelled = true
+    }
+  }, [bookingId])
+
+  const bookingView = useMemo(() => {
+    if (!booking) return null
+    for (const apt of apartmentList) {
+      for (const unit of apt.units ?? []) {
+        if (String(unit.id) === String(booking.unit)) {
+          return {
+            property: apt.name,
+            unit: String((unit as any).unit_number_or_id ?? unit.id),
+            location: apt.address || "No address provided",
+            landlord: {
+              name: apt.landlord_info?.full_name || apt.landlord_info?.username || "Landlord",
+              phone: apt.landlord_info?.phone_number || "",
+              email: apt.landlord_info?.email || "",
+            },
+          }
+        }
+      }
+    }
+    return {
+      property: "Booked Property",
+      unit: String(booking.unit).slice(0, 8),
+      location: "Location unavailable",
+      landlord: {
+        name: "Landlord",
+        phone: "",
+        email: "",
+      },
+    }
+  }, [booking, apartmentList])
 
   return (
     <div className="min-h-screen bg-background">
@@ -55,8 +115,8 @@ export default function BookingConfirmation() {
                     <Home className="h-5 w-5 text-primary mt-0.5 shrink-0" />
                     <div>
                       <p className="text-sm text-muted-foreground font-nunito">Property</p>
-                      <p className="font-semibold text-foreground font-montserrat">Modern 2BR Apartment in Kilimani</p>
-                      <p className="text-sm text-muted-foreground font-nunito">Unit A101</p>
+                      <p className="font-semibold text-foreground font-montserrat">{bookingView?.property || "Booked Property"}</p>
+                      <p className="text-sm text-muted-foreground font-nunito">Unit {bookingView?.unit || "--"}</p>
                     </div>
                   </div>
 
@@ -64,7 +124,7 @@ export default function BookingConfirmation() {
                     <MapPin className="h-5 w-5 text-primary mt-0.5 shrink-0" />
                     <div>
                       <p className="text-sm text-muted-foreground font-nunito">Location</p>
-                      <p className="font-semibold text-foreground font-nunito">Kilimani, Nairobi</p>
+                      <p className="font-semibold text-foreground font-nunito">{bookingView?.location || "Location unavailable"}</p>
                     </div>
                   </div>
 
@@ -72,7 +132,7 @@ export default function BookingConfirmation() {
                     <Calendar className="h-5 w-5 text-primary mt-0.5 shrink-0" />
                     <div>
                       <p className="text-sm text-muted-foreground font-nunito">Move-in Date</p>
-                      <p className="font-semibold text-foreground font-nunito">March 1, 2025</p>
+                      <p className="font-semibold text-foreground font-nunito">{booking?.move_in_date || "--"}</p>
                     </div>
                   </div>
 
@@ -80,8 +140,41 @@ export default function BookingConfirmation() {
                     <Mail className="h-5 w-5 text-primary mt-0.5 shrink-0" />
                     <div>
                       <p className="text-sm text-muted-foreground font-nunito">Booking Reference</p>
-                      <p className="font-semibold text-foreground font-mono">TYR-2025-001234</p>
+                      <p className="font-semibold text-foreground font-mono">
+                        {booking?.booking_confirmation_code || bookingId || "Pending"}
+                      </p>
                     </div>
+                  </div>
+                </div>
+
+                <div className="mt-6 pt-6 border-t border-border">
+                  <h3 className="text-lg font-bold text-foreground mb-4 font-montserrat flex items-center gap-2">
+                    <User className="h-5 w-5 text-primary" />
+                    Landlord Details
+                  </h3>
+                  <div className="space-y-3">
+                    <div>
+                      <p className="text-sm text-muted-foreground font-nunito">Landlord Name</p>
+                      <p className="font-semibold text-foreground font-montserrat">{bookingView?.landlord?.name || "Landlord"}</p>
+                    </div>
+                    {bookingView?.landlord?.phone && (
+                      <div>
+                        <p className="text-sm text-muted-foreground font-nunito flex items-center gap-2">
+                          <Phone className="h-4 w-4" />
+                          Phone
+                        </p>
+                        <p className="font-semibold text-foreground font-nunito">{bookingView.landlord.phone}</p>
+                      </div>
+                    )}
+                    {bookingView?.landlord?.email && (
+                      <div>
+                        <p className="text-sm text-muted-foreground font-nunito flex items-center gap-2">
+                          <Mail className="h-4 w-4" />
+                          Email
+                        </p>
+                        <p className="font-semibold text-foreground font-nunito break-all">{bookingView.landlord.email}</p>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -90,7 +183,9 @@ export default function BookingConfirmation() {
                     <span className="text-muted-foreground font-nunito">Booking Fee Paid</span>
                     <span className="text-2xl font-bold text-foreground font-montserrat">KES 350</span>
                   </div>
-                  <p className="text-xs text-muted-foreground font-nunito">Payment successful via M-Pesa</p>
+                  <p className="text-xs text-muted-foreground font-nunito">
+                    {booking?.payment_status === "COMPLETED" ? "Payment successful via M-Pesa" : "Payment initiated successfully"}
+                  </p>
                 </div>
               </CardContent>
             </Card>
@@ -154,7 +249,7 @@ export default function BookingConfirmation() {
               Download Receipt
             </Button>
             <Button
-              onClick={() => router.push("/tenant/dashboard")}
+              onClick={() => router.push("/tenant/dashboard?tab=overview")}
               className="flex-1 tyrent-gradient text-white font-nunito"
             >
               Go to Dashboard

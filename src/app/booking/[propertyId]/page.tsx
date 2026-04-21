@@ -1,142 +1,198 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { motion } from "framer-motion"
-import { useParams, useRouter } from "next/navigation"
+import { useParams, useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { sampleProperties } from "@/data/SampleProperties"
 import { PageRoutes } from "@/constants/page-routes"
-import { addTenantPayment, saveTenantLease, type TenantLease } from "@/lib/tenant-storage"
-import { generateId, saveLandlordBookings, type LandlordBooking } from "@/lib/landlord-storage"
+import { ApiError } from "@/lib/api/client"
+import { backendGetApartment, type BackendApartment, type BackendUnit } from "@/lib/api/properties"
+import { backendCreateBooking } from "@/lib/api/bookings"
+import { backendInitiateMpesaPayment } from "@/lib/api/wallet"
+import { requireAuth } from "@/lib/route-guards"
 import {
   Calendar,
   Users,
-  CreditCard,
-  CheckCircle2,
   ArrowLeft,
-  Shield,
-  Clock,
+  Wallet,
+  Loader2,
   MapPin,
   BedDouble,
   Bath,
   Maximize,
   AlertCircle,
-  Wallet,
-  Building2,
+  CheckCircle2,
+  Shield,
+  Clock,
 } from "lucide-react"
 
 export default function BookingCheckout() {
   const params = useParams()
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const [apartment, setApartment] = useState<BackendApartment | null>(null)
+  const [loadingProperty, setLoadingProperty] = useState(true)
   const [moveInDate, setMoveInDate] = useState("")
   const [tenants, setTenants] = useState(1)
-  const [paymentMethod, setPaymentMethod] = useState("mpesa")
   const [phoneNumber, setPhoneNumber] = useState("")
-  const [cardNumber, setCardNumber] = useState("")
-  const [cardExpiry, setCardExpiry] = useState("")
-  const [cardCvv, setCardCvv] = useState("")
   const [agreedToTerms, setAgreedToTerms] = useState(false)
+  const [submitError, setSubmitError] = useState<string | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [submitStage, setSubmitStage] = useState<"idle" | "creating" | "initiating" | "finishing">("idle")
+  const paymentMethod = "mpesa"
 
   const propertyId = params?.propertyId as string
-  const propertyData = sampleProperties.find((p) => p.id === propertyId)
+  const selectedUnitId = (searchParams.get("unit") || "").trim()
 
-  // Fallback to mock data if property not found
-  const property = propertyData || {
-    id: propertyId,
-    title: "Modern 2BR Apartment in Kilimani",
-    location: "Kilimani, Nairobi",
-    bedrooms: 2,
-    bathrooms: 2,
-    size: 1200,
-    price: 65000,
-    images: ["/modern-apartment-living-room.png"],
-    landlord: {
-      name: "John Kamau",
-      phone: "+254 700 000 000",
-      verified: true,
-    },
+  const API_BASE = (process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:8000").replace(/\/+$/, "")
+  const absolutizeUrl = (url?: string | null) => {
+    if (!url) return ""
+    return url.startsWith("http://") || url.startsWith("https://") ? url : `${API_BASE}${url.startsWith("/") ? "" : "/"}${url}`
   }
 
-  const rent = property.price || 65000
+  useEffect(() => {
+    const auth = requireAuth({ role: "tenant" })
+    if (!auth.ok) {
+      router.replace(auth.redirectTo)
+      return
+    }
+  }, [router])
+
+  useEffect(() => {
+    let cancelled = false
+    const load = async () => {
+      setLoadingProperty(true)
+      try {
+        const apt = await backendGetApartment(propertyId)
+        if (!cancelled) setApartment(apt)
+      } catch {
+        if (!cancelled) setApartment(null)
+      } finally {
+        if (!cancelled) setLoadingProperty(false)
+      }
+    }
+    if (propertyId) void load()
+    return () => {
+      cancelled = true
+    }
+  }, [propertyId])
+
+  const parseBedrooms = (unitType?: string | null) => {
+    const t = String(unitType || "").toLowerCase()
+    if (!t) return null
+    if (t.includes("bedsitter") || t.includes("studio")) return 0
+    const m = t.match(/(\d+)/)
+    if (m) return Number(m[1])
+    return null
+  }
+
+  const selectedUnit = useMemo(() => {
+    const units = apartment?.units ?? []
+    if (units.length === 0) return null
+    const exact = units.find((u) => String(u.id) === selectedUnitId)
+    if (exact) return exact
+    const vacant = units.find((u) => String((u as any).status || "").toUpperCase() === "VACANT")
+    return vacant ?? units[0]
+  }, [apartment, selectedUnitId])
+
+  const property = useMemo(() => {
+    const unit = selectedUnit
+    const interior = Array.isArray((unit as any)?.interior_images) ? ((unit as any).interior_images as string[]) : []
+    const exterior = Array.isArray((unit as any)?.exterior_images) ? ((unit as any).exterior_images as string[]) : []
+    const fallbackExterior = absolutizeUrl(apartment?.exterior_image_url || apartment?.exterior_image) || "/placeholder.svg"
+    const unitImage = interior[0] || exterior[0]
+    return {
+      id: apartment?.id || propertyId,
+      title: apartment?.name || "Property",
+      location: apartment?.address || "No address provided",
+      bedrooms: parseBedrooms((unit as any)?.type) ?? 0,
+      bathrooms: 1,
+      size: Number((unit as any)?.size_sqft ?? 0),
+      price: Number((unit as any)?.price_per_month ?? 0),
+      images: [unitImage ? absolutizeUrl(unitImage) : fallbackExterior],
+    }
+  }, [apartment, selectedUnit, propertyId])
+
+  const rent = property.price || 0
   const bookingFee = 350
-  const serviceFee = 0
   const total = bookingFee
 
-  const normalizePhoneForWhatsapp = (value: string) => {
-    const digits = value.replace(/[^\d]/g, "")
-    if (digits.startsWith("0")) return `254${digits.slice(1)}`
-    if (digits.startsWith("254")) return digits
-    if (digits.startsWith("7") || digits.startsWith("1")) return `254${digits}`
-    return digits
-  }
-
-  const handleSubmit = () => {
-    if (!moveInDate || !agreedToTerms) return
-    // Persist booking locally (frontend-only) until backend is wired.
+  const handleSubmit = async () => {
+    setSubmitError(null)
+    if (!moveInDate || !agreedToTerms) {
+      setSubmitError("Please provide move-in date and accept terms.")
+      return
+    }
+    if (!selectedUnit?.id) {
+      setSubmitError("No unit selected for this booking.")
+      return
+    }
+    if (paymentMethod === "mpesa" && !phoneNumber.trim()) {
+      setSubmitError("Please enter your M-Pesa phone number.")
+      return
+    }
+    setIsSubmitting(true)
+    setSubmitStage("creating")
     try {
-      const lease: TenantLease = {
-        id: generateId("lease"),
-        propertyId: property.id,
-        property: property.title,
-        unit: "TBD",
-        location: property.location,
-        landlord: {
-          name: property.landlord?.name ?? "Landlord",
-          phone: property.landlord?.phone ?? "",
-          email: (property as any)?.landlord?.email ?? "landlord@example.com",
-          verified: Boolean(property.landlord?.verified),
-        },
-        rent: rent,
-        deposit: rent * 2,
-        leaseStart: moveInDate,
-        leaseEnd: "",
-        nextPaymentDue: "",
-        imageUrl: property.images?.[0],
-      }
-      saveTenantLease(lease)
-
-      addTenantPayment({
-        id: generateId("payment"),
-        date: new Date().toISOString().slice(0, 10),
-        amount: total,
-        status: "paid",
-        method: paymentMethod === "mpesa" ? "M-Pesa" : paymentMethod === "card" ? "Card" : "Bank",
-        reference: `TYR-BOOK-${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
-        note: `Booking fee for ${property.title}`,
+      const booking = await backendCreateBooking({
+        unit: String(selectedUnit.id),
+        move_in_date: moveInDate,
+        booking_amount: bookingFee,
+        lease_agreement_acknowledged: true,
       })
 
-      // Also create a pending booking for the landlord dashboard (if landlord demo store exists).
-      const landlordBooking: LandlordBooking = {
-        id: generateId("booking"),
-        tenant: "Tenant",
-        propertyId: property.id,
-        propertyName: property.title,
-        unit: "TBD",
-        moveInDate,
-        amount: total,
-        status: "pending",
-        submittedDate: new Date().toISOString().slice(0, 10),
+      if (paymentMethod === "mpesa") {
+        setSubmitStage("initiating")
+        await backendInitiateMpesaPayment({
+          phone: phoneNumber.trim(),
+          amount: total,
+          booking_id: String(booking.id),
+        })
       }
-      const existing = (() => {
-        try {
-          return (typeof window !== "undefined" ? (JSON.parse(localStorage.getItem("tyrent_landlord_bookings_v1") || "[]") as LandlordBooking[]) : [])
-        } catch {
-          return []
-        }
-      })()
-      saveLandlordBookings([landlordBooking, ...existing])
-    } catch {
-      // If persistence fails, still allow navigation to confirmation.
-    }
 
-    router.push(PageRoutes.BOOKING_CONFIRMATION)
+      setSubmitStage("finishing")
+      router.push(`${PageRoutes.BOOKING_CONFIRMATION}?booking=${encodeURIComponent(String(booking.id))}`)
+    } catch (e) {
+      const msg = e instanceof ApiError ? e.message : e instanceof Error ? e.message : "Booking failed. Please try again."
+      setSubmitError(msg)
+    } finally {
+      setIsSubmitting(false)
+      setSubmitStage("idle")
+    }
   }
 
   return (
     <div className="min-h-screen bg-background">
+      {isSubmitting && (
+        <div className="fixed inset-0 z-[120] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <Card className="w-full max-w-md shadow-2xl">
+            <CardContent className="p-6">
+              <div className="flex items-start gap-4">
+                <div className="w-12 h-12 rounded-full tyrent-gradient flex items-center justify-center shrink-0">
+                  <Loader2 className="h-6 w-6 text-white animate-spin" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-foreground font-montserrat mb-1">
+                    {submitStage === "creating"
+                      ? "Creating your booking..."
+                      : submitStage === "initiating"
+                        ? "Waiting for M-Pesa prompt..."
+                        : "Finalizing your booking..."}
+                  </h3>
+                  <p className="text-sm text-muted-foreground font-nunito">
+                    {submitStage === "initiating"
+                      ? "Please complete the payment prompt on your phone."
+                      : "Please wait a moment. Do not close this page."}
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
       <div className="pt-24 pb-16">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-6xl">
           {/* Back Button */}
@@ -152,7 +208,14 @@ export default function BookingCheckout() {
               <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
                 <h1 className="text-3xl font-bold text-foreground mb-2 font-montserrat">Confirm and Pay</h1>
                 <p className="text-muted-foreground font-nunito">Review your booking details and complete payment</p>
+                {selectedUnit?.id && (
+                  <p className="text-sm text-primary font-nunito mt-1">
+                    Booking selected unit: {String((selectedUnit as any).unit_number_or_id || selectedUnit.id).slice(0, 16)}
+                  </p>
+                )}
               </motion.div>
+              {loadingProperty && <p className="text-sm text-muted-foreground font-nunito">Loading property details...</p>}
+              {submitError && <p className="text-sm text-red-600 font-nunito">{submitError}</p>}
 
               {/* Move-in Details */}
               <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
@@ -214,25 +277,21 @@ export default function BookingCheckout() {
                 <Card>
                   <CardContent className="p-6">
                     <h2 className="text-xl font-bold text-foreground mb-4 flex items-center gap-2 font-montserrat">
-                      <CreditCard className="h-5 w-5 text-primary" />
+                      <Wallet className="h-5 w-5 text-primary" />
                       Payment Method
                     </h2>
 
                     <div className="space-y-4">
                       {/* M-Pesa */}
                       <label
-                        className={`flex items-start gap-4 p-4 border-2 rounded-lg cursor-pointer transition-all ${
-                          paymentMethod === "mpesa"
-                            ? "border-primary bg-primary/5"
-                            : "border-border hover:border-primary/50"
-                        }`}
+                        className={`flex items-start gap-4 p-4 border-2 rounded-lg cursor-pointer transition-all border-primary bg-primary/5`}
                       >
                         <input
                           type="radio"
                           name="payment"
                           value="mpesa"
                           checked={paymentMethod === "mpesa"}
-                          onChange={(e) => setPaymentMethod(e.target.value)}
+                          readOnly
                           className="mt-1"
                         />
                         <div className="flex-1">
@@ -260,102 +319,6 @@ export default function BookingCheckout() {
                               />
                             </div>
                           )}
-                        </div>
-                      </label>
-
-                      {/* Card Payment */}
-                      <label
-                        className={`flex items-start gap-4 p-4 border-2 rounded-lg cursor-pointer transition-all ${
-                          paymentMethod === "card"
-                            ? "border-primary bg-primary/5"
-                            : "border-border hover:border-primary/50"
-                        }`}
-                      >
-                        <input
-                          type="radio"
-                          name="payment"
-                          value="card"
-                          checked={paymentMethod === "card"}
-                          onChange={(e) => setPaymentMethod(e.target.value)}
-                          className="mt-1"
-                        />
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-2">
-                            <CreditCard className="h-5 w-5 text-primary" />
-                            <span className="font-semibold font-montserrat">Credit/Debit Card</span>
-                          </div>
-                          <p className="text-sm text-muted-foreground font-nunito mb-3">
-                            Pay with Visa, Mastercard, or other cards
-                          </p>
-                          {paymentMethod === "card" && (
-                            <div className="space-y-3 mt-3">
-                              <div>
-                                <label className="block text-sm font-semibold text-foreground mb-2 font-montserrat">
-                                  Card Number
-                                </label>
-                                <input
-                                  type="text"
-                                  placeholder="1234 5678 9012 3456"
-                                  value={cardNumber}
-                                  onChange={(e) => setCardNumber(e.target.value)}
-                                  className="w-full px-4 py-3 border border-input rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-ring font-nunito"
-                                />
-                              </div>
-                              <div className="grid grid-cols-2 gap-3">
-                                <div>
-                                  <label className="block text-sm font-semibold text-foreground mb-2 font-montserrat">
-                                    Expiry Date
-                                  </label>
-                                  <input
-                                    type="text"
-                                    placeholder="MM/YY"
-                                    value={cardExpiry}
-                                    onChange={(e) => setCardExpiry(e.target.value)}
-                                    className="w-full px-4 py-3 border border-input rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-ring font-nunito"
-                                  />
-                                </div>
-                                <div>
-                                  <label className="block text-sm font-semibold text-foreground mb-2 font-montserrat">
-                                    CVV
-                                  </label>
-                                  <input
-                                    type="text"
-                                    placeholder="123"
-                                    value={cardCvv}
-                                    onChange={(e) => setCardCvv(e.target.value)}
-                                    className="w-full px-4 py-3 border border-input rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-ring font-nunito"
-                                  />
-                                </div>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      </label>
-
-                      {/* Bank Transfer */}
-                      <label
-                        className={`flex items-start gap-4 p-4 border-2 rounded-lg cursor-pointer transition-all ${
-                          paymentMethod === "bank"
-                            ? "border-primary bg-primary/5"
-                            : "border-border hover:border-primary/50"
-                        }`}
-                      >
-                        <input
-                          type="radio"
-                          name="payment"
-                          value="bank"
-                          checked={paymentMethod === "bank"}
-                          onChange={(e) => setPaymentMethod(e.target.value)}
-                          className="mt-1"
-                        />
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-2">
-                            <Building2 className="h-5 w-5 text-primary" />
-                            <span className="font-semibold font-montserrat">Bank Transfer</span>
-                          </div>
-                          <p className="text-sm text-muted-foreground font-nunito">
-                            Direct bank transfer (Processing time: 1-2 business days)
-                          </p>
                         </div>
                       </label>
                     </div>
@@ -476,39 +439,20 @@ export default function BookingCheckout() {
                       </div>
                     </div>
 
-                    {/* Landlord Info */}
-                    <div className="bg-muted/50 rounded-lg p-4 mb-6">
-                      <div className="flex items-center gap-2 mb-2">
-                        <span className="text-sm font-semibold text-foreground font-montserrat">Landlord:</span>
-                        {property.landlord?.verified && (
-                          <Badge variant="outline" className="text-green-600 border-green-600">
-                            <CheckCircle2 className="h-3 w-3 mr-1" />
-                            Verified
-                          </Badge>
-                        )}
-                      </div>
-                      <p className="text-sm text-foreground font-nunito mb-1">{property.landlord?.name}</p>
-                      <p className="text-xs text-muted-foreground font-nunito">{property.landlord?.phone}</p>
-                      {property.landlord?.phone && (
-                        <a
-                          className="mt-2 inline-block text-xs text-primary hover:underline font-nunito"
-                          href={`https://wa.me/${normalizePhoneForWhatsapp(property.landlord.phone)}`}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          WhatsApp landlord
-                        </a>
-                      )}
-                    </div>
-
                     {/* Submit Button */}
                     <Button
                       onClick={handleSubmit}
-                      disabled={!moveInDate || !agreedToTerms}
+                      disabled={!moveInDate || !agreedToTerms || isSubmitting || loadingProperty || !selectedUnit}
                       className="w-full tyrent-gradient text-white py-6 text-lg font-montserrat shadow-lg"
                     >
-                      <CheckCircle2 className="h-5 w-5 mr-2" />
-                      Pay KES {total} & Reserve
+                      {isSubmitting ? <Loader2 className="h-5 w-5 mr-2 animate-spin" /> : <CheckCircle2 className="h-5 w-5 mr-2" />}
+                      {isSubmitting
+                        ? submitStage === "creating"
+                          ? "Creating booking..."
+                          : submitStage === "initiating"
+                            ? "Initiating payment..."
+                            : "Finalizing..."
+                        : `Pay KES ${total} & Reserve`}
                     </Button>
 
                     {/* Security Badge */}
