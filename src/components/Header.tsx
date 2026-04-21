@@ -86,6 +86,7 @@ export default function Header() {
   const toggleIconColor = iconColor
 
   const dashboardHref = sessionRole ? dashboardRouteForRole(sessionRole as any) : "/auth/login"
+  const showMyBookings = sessionRole !== "landlord" && sessionRole !== "admin"
 
   return (
     <header
@@ -116,7 +117,7 @@ export default function Header() {
             {[
               { href: "/", label: "Home" },
               { href: "/properties", label: "Properties" },
-              { href: "/tenant/dashboard", label: "My Bookings" },
+              ...(showMyBookings ? [{ href: "/tenant/dashboard", label: "My Bookings" }] : []),
             ].map(({ href, label }) => (
               <Link key={href} href={href}>
                 <Button
@@ -312,7 +313,9 @@ export default function Header() {
                 {[
                   { href: "/", label: "Home", Icon: Home },
                   { href: "/properties", label: "Browse Properties", Icon: Search },
-                  { href: "/tenant/dashboard", label: "My Bookings", Icon: LayoutDashboard },
+                  ...(showMyBookings
+                    ? [{ href: "/tenant/dashboard", label: "My Bookings", Icon: LayoutDashboard }]
+                    : []),
                 ].map(({ href, label, Icon }) => (
                   <Link
                     key={href}

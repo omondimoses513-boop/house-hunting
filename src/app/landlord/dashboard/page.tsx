@@ -35,7 +35,10 @@ import {
 import { requireAuth } from "@/lib/route-guards"
 import { backendLandlordDashboard, type BackendLandlordDashboard } from "@/lib/api/dashboard"
 import { backendGetMyProfile } from "@/lib/api/users"
+import { backendGetUserById } from "@/lib/api/users"
 import { ApiError } from "@/lib/api/client"
+import { backendListApartments, type BackendApartment } from "@/lib/api/properties"
+import { backendApproveBooking, backendCancelBooking, backendLandlordBookings } from "@/lib/api/bookings"
 
 export default function LandlordDashboard() {
   const router = useRouter()
@@ -48,9 +51,11 @@ export default function LandlordDashboard() {
   const [banner, setBanner] = useState<{ title: string; message: string } | null>(null)
   const [backendStats, setBackendStats] = useState<BackendLandlordDashboard["stats"] | null>(null)
   const [backendProfileName, setBackendProfileName] = useState<string>("")
+  const [backendApartments, setBackendApartments] = useState<BackendApartment[]>([])
   const [verificationState, setVerificationState] = useState<"pending" | "rejected" | "verified" | "suspended" | null>(null)
   const [localProfileName, setLocalProfileName] = useState("")
   const [usingBackendData, setUsingBackendData] = useState(false)
+  const [bookingActionLoading, setBookingActionLoading] = useState<string | null>(null)
 
   useEffect(() => {
     const auth = requireAuth({ role: "landlord" })
@@ -84,9 +89,65 @@ export default function LandlordDashboard() {
         setUsingBackendData(true)
         setBackendStats(data.stats ?? null)
         setBackendProfileName(data.profile?.full_name ?? "")
-        // Backend-first mode: do not show local demo records.
+        // Backend-first mode: load real apartments list (landlord-filtered on backend).
+        try {
+          const [apts, rawBookings] = await Promise.all([
+            backendListApartments(),
+            backendLandlordBookings().catch(() => []),
+          ])
+          setBackendApartments(Array.isArray(apts) ? apts : [])
+          const bookingsArray = Array.isArray(rawBookings) ? rawBookings : []
+          const tenantIds = Array.from(new Set(bookingsArray.map((b: any) => String(b.tenant || "")).filter(Boolean)))
+          const tenantMap = new Map<string, { name: string; phone: string }>()
+          await Promise.all(
+            tenantIds.map(async (tenantId) => {
+              try {
+                const user = await backendGetUserById(tenantId)
+                tenantMap.set(tenantId, {
+                  name: user.full_name || user.username || user.email || "Tenant",
+                  phone: user.phone_number || user.phone || "N/A",
+                })
+              } catch {
+                tenantMap.set(tenantId, { name: `Tenant ${tenantId.slice(0, 8)}`, phone: "N/A" })
+              }
+            }),
+          )
+          const unitMap = new Map<string, { unit: string; propertyId: string; propertyName: string }>()
+          for (const apt of Array.isArray(apts) ? apts : []) {
+            for (const u of apt.units ?? []) {
+              unitMap.set(String(u.id), {
+                unit: String((u as any).unit_number_or_id ?? u.id).slice(0, 16),
+                propertyId: String(apt.id),
+                propertyName: apt.name,
+              })
+            }
+          }
+          const mappedBookings: LandlordBooking[] = bookingsArray.map((b: any) => {
+            const m = unitMap.get(String(b.unit))
+            const bookingStatus = String(b.booking_status || "").toUpperCase()
+            const tenantInfo = tenantMap.get(String(b.tenant || "")) ?? { name: "Tenant", phone: "N/A" }
+            return {
+              id: String(b.id),
+              tenant: tenantInfo.name,
+              propertyId: m?.propertyId || "",
+              propertyName: m?.propertyName || "Property",
+              unit: m?.unit || String(b.unit).slice(0, 8),
+              moveInDate: String(b.move_in_date || ""),
+              amount: Number(b.booking_amount ?? 0),
+              status: bookingStatus === "PENDING" ? "pending" : bookingStatus === "CANCELLED" ? "declined" : "approved",
+              submittedDate: String((b.created_at || b.reservation_date || "").slice(0, 10)),
+              phone: tenantInfo.phone,
+              reference: String(b.booking_confirmation_code || "").toUpperCase(),
+            }
+          }) as LandlordBooking[]
+          setBookings(mappedBookings)
+        } catch {
+          setBackendApartments([])
+          setBookings([])
+        }
+
+        // Keep local demo records hidden in backend-first mode.
         setProperties([])
-        setBookings([])
         setSelectedPropertyId(null)
       } catch (err) {
         if (err instanceof ApiError && err.status === 403) {
@@ -99,6 +160,7 @@ export default function LandlordDashboard() {
         }
         // Fallback mode: only here we load local demo data.
         setUsingBackendData(false)
+        setBackendApartments([])
         seedLandlordDemoDataIfEmpty()
         const nextProperties = getLandlordProperties()
         const nextBookings = getLandlordBookings()
@@ -152,6 +214,35 @@ export default function LandlordDashboard() {
     })
   }, [properties])
 
+  const backendComputedProperties = useMemo(() => {
+    const API_BASE = (process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:8000").replace(/\/+$/, "")
+    const abs = (url?: string | null) =>
+      !url ? "" : url.startsWith("http://") || url.startsWith("https://") ? url : `${API_BASE}${url.startsWith("/") ? "" : "/"}${url}`
+
+    return backendApartments.map((a) => {
+      const units = Array.isArray(a.units) ? a.units : []
+      const totalUnits = units.length
+      const occupiedUnits = units.filter((u) => String((u as any).status ?? "").toUpperCase() === "OCCUPIED").length
+      const vacantUnits = units.filter((u) => String((u as any).status ?? "").toUpperCase() === "VACANT").length
+      const monthlyRevenue = units.reduce((sum, u) => {
+        const price = Number((u as any).price_per_month ?? 0)
+        return sum + (String((u as any).status ?? "").toUpperCase() === "OCCUPIED" ? price : 0)
+      }, 0)
+      const image = abs(a.exterior_image_url || a.exterior_image) || "/placeholder.svg"
+      const location = (a.address ?? "").toString() || "No address provided"
+      return {
+        id: a.id,
+        name: a.name,
+        image,
+        location,
+        totalUnits,
+        occupiedUnits,
+        vacantUnits,
+        monthlyRevenue,
+      }
+    })
+  }, [backendApartments])
+
   const stats = useMemo(() => {
     if (backendStats) {
       const occupiedUnits = Number(backendStats.occupied_units ?? 0)
@@ -188,10 +279,10 @@ export default function LandlordDashboard() {
     }
   }, [properties, bookings])
 
-  const selectedProperty = useMemo(
-    () => properties.find((p) => p.id === selectedPropertyId) ?? null,
-    [properties, selectedPropertyId],
-  )
+  const selectedProperty = useMemo(() => {
+    if (usingBackendData) return null
+    return properties.find((p) => p.id === selectedPropertyId) ?? null
+  }, [properties, selectedPropertyId, usingBackendData])
 
   const recentActivity = [
     { type: "booking", message: "New booking request from Jane Wanjiru", time: "2 hours ago" },
@@ -199,6 +290,41 @@ export default function LandlordDashboard() {
     { type: "vacancy", message: "Unit B103 marked as vacant", time: "1 day ago" },
     { type: "lease", message: "Lease renewed for Unit C301", time: "2 days ago" },
   ]
+
+  const approveBackendBooking = async (bookingId: string) => {
+    setBookingActionLoading(bookingId)
+    try {
+      await backendApproveBooking(bookingId)
+      setBookings((prev) => prev.map((b: any) => (b.id === bookingId ? { ...b, status: "approved" } : b)))
+      setBanner({ title: "Booking approved", message: "The booking has been approved successfully." })
+    } catch (e) {
+      setBanner({
+        title: "Approve unavailable",
+        message:
+          e instanceof Error
+            ? e.message
+            : "Backend approve endpoint is not available yet. Add /api/bookings/<id>/approve/ to enable this action.",
+      })
+    } finally {
+      setBookingActionLoading(null)
+    }
+  }
+
+  const declineBackendBooking = async (bookingId: string) => {
+    setBookingActionLoading(bookingId)
+    try {
+      await backendCancelBooking(bookingId)
+      setBookings((prev) => prev.map((b: any) => (b.id === bookingId ? { ...b, status: "declined" } : b)))
+      setBanner({ title: "Booking declined", message: "The booking has been cancelled/refunded successfully." })
+    } catch (e) {
+      setBanner({
+        title: "Decline failed",
+        message: e instanceof Error ? e.message : "Failed to decline booking.",
+      })
+    } finally {
+      setBookingActionLoading(null)
+    }
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -371,10 +497,10 @@ export default function LandlordDashboard() {
                       <Badge className="bg-orange-500 text-white border-0">{stats.pendingBookings}</Badge>
                     )}
                   </div>
-                  <p className="text-sm text-muted-foreground mb-1 font-nunito">Pending Bookings</p>
+                  <p className="text-sm text-muted-foreground mb-1 font-nunito">Bookings</p>
                   <p className="text-3xl font-bold text-foreground font-montserrat">{stats.pendingBookings}</p>
                   <p className="text-xs text-muted-foreground mt-2 font-nunito">
-                    {stats.pendingBookings > 0 ? "Require your attention" : "No pending bookings"}
+                    {stats.pendingBookings > 0 ? "Total bookings" : "No bookings yet"}
                   </p>
                 </CardContent>
               </Card>
@@ -397,7 +523,7 @@ export default function LandlordDashboard() {
 
             {/* Properties Tab */}
             <TabsContent value="properties" className="space-y-6">
-              {computedProperties.length === 0 && (
+              {(usingBackendData ? backendComputedProperties : computedProperties).length === 0 && (
                 <Card>
                   <CardContent className="p-6">
                     <p className="text-sm text-muted-foreground font-nunito">
@@ -409,7 +535,7 @@ export default function LandlordDashboard() {
                 </Card>
               )}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {computedProperties.map((property, index) => (
+                {(usingBackendData ? backendComputedProperties : computedProperties).map((property, index) => (
                   <motion.div
                     key={property.id}
                     initial={{ opacity: 0, y: 20 }}
@@ -555,6 +681,11 @@ export default function LandlordDashboard() {
                         {usingBackendData ? "No booking requests from backend yet." : "No booking requests yet."}
                       </div>
                     )}
+                    {usingBackendData && bookings.length > 0 && (
+                      <div className="p-3 border border-border rounded-lg text-xs text-muted-foreground font-nunito">
+                        Approve uses backend endpoint if available; Decline uses cancel endpoint.
+                      </div>
+                    )}
                     {bookings.map((booking) => (
                       <div
                         key={booking.id}
@@ -563,58 +694,18 @@ export default function LandlordDashboard() {
                         <div className="flex-1 mb-4 md:mb-0">
                           <div className="flex items-center gap-2 mb-2">
                             <h4 className="font-semibold text-foreground font-montserrat">{booking.tenant}</h4>
-                            <Badge
-                              variant={booking.status === "pending" ? "outline" : "default"}
-                              className={
-                                booking.status === "pending"
-                                  ? "text-orange-600 border-orange-600"
-                                  : "bg-green-500 text-white border-0"
-                              }
-                            >
-                              {booking.status === "pending" ? (
-                                <>
-                                  <Clock className="h-3 w-3 mr-1" />
-                                  Pending
-                                </>
-                              ) : (
-                                <>
-                                  <CheckCircle2 className="h-3 w-3 mr-1" />
-                                  Approved
-                                </>
-                              )}
-                            </Badge>
                           </div>
                           <p className="text-sm text-muted-foreground font-nunito mb-1">
                             {booking.propertyName} - Unit {booking.unit}
                           </p>
                           <div className="flex flex-wrap gap-4 text-xs text-muted-foreground font-nunito">
                             <span>Move-in: {booking.moveInDate}</span>
-                            <span>Amount: KES {booking.amount.toLocaleString()}</span>
                             <span>Submitted: {booking.submittedDate}</span>
+                            {"phone" in booking && (booking as any).phone ? <span>Phone: {(booking as any).phone}</span> : null}
                           </div>
                         </div>
 
-                        {booking.status === "pending" && (
-                          <div className="flex gap-2">
-                            <Button
-                              size="sm"
-                              className="tyrent-gradient text-white font-nunito"
-                              onClick={() => setBookings(updateBookingStatus(booking.id, "approved"))}
-                            >
-                              <CheckCircle2 className="h-4 w-4 mr-1" />
-                              Approve
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="text-red-600 border-red-600 font-nunito bg-transparent"
-                              onClick={() => setBookings(updateBookingStatus(booking.id, "declined"))}
-                                  >
-                              <XCircle className="h-4 w-4 mr-1" />
-                              Decline
-                            </Button>
-                          </div>
-                        )}
+
                       </div>
                     ))}
                   </div>

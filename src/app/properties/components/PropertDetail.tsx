@@ -3,19 +3,22 @@
 import { useEffect, useMemo, useState } from "react"
 import { motion } from "framer-motion"
 import Link from "next/link"
-import { useParams, useRouter } from "next/navigation"
+import { useParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
-import { getPropertyBySlug, getSimilarProperties } from "@/data/SampleProperties"
 import { PageRoutes } from "@/constants/page-routes"
 import { getFavorites, submitReport, toggleFavorite } from "@/lib/user-preferences"
+import { ApiError } from "@/lib/api/client"
+import { backendGetApartment, backendListApartments, type BackendApartment, type BackendUnit } from "@/lib/api/properties"
 import {
   Star,
   Heart,
   Share2,
   MapPin,
+  MapPinIcon,
+  Home,
   BedDouble,
   Bath,
   Maximize,
@@ -27,24 +30,206 @@ import {
   X,
   Video,
   Clock,
-  Home,
-  MapPinIcon,
+  FileText,
 } from "lucide-react"
 
 export default function PropertyDetail() {
   const params = useParams()
-  const router = useRouter()
   const slug = params?.slug as string
 
-  const property = getPropertyBySlug(slug)
-  const similarProperties = property ? getSimilarProperties(property.id) : []
+  const [apartment, setApartment] = useState<BackendApartment | null>(null)
+  const [similar, setSimilar] = useState<BackendApartment[]>([])
+  const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
+
+  const API_BASE = (process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:8000").replace(/\/+$/, "")
+  const absolutizeUrl = (url?: string | null) => {
+    if (!url) return ""
+    return url.startsWith("http://") || url.startsWith("https://") ? url : `${API_BASE}${url.startsWith("/") ? "" : "/"}${url}`
+  }
+
+  const cheapestUnit = (units?: BackendUnit[]) => {
+    if (!Array.isArray(units) || units.length === 0) return null
+    let best: BackendUnit | null = null
+    let bestPrice = Number.POSITIVE_INFINITY
+    for (const u of units) {
+      const p = Number((u as any).price_per_month ?? Number.POSITIVE_INFINITY)
+      if (Number.isFinite(p) && p < bestPrice) {
+        bestPrice = p
+        best = u
+      }
+    }
+    return best
+  }
+
+  const parseBedrooms = (unitType?: string | null) => {
+    const t = String(unitType || "").toLowerCase()
+    if (!t) return null
+    if (t.includes("bedsitter") || t.includes("studio")) return 0
+    const m = t.match(/(\d+)/)
+    if (m) return Number(m[1])
+    return null
+  }
+
+  const toUnitTypeLabel = (unitType?: string | null) => {
+    const raw = String(unitType || "").trim()
+    if (!raw) return "Unit"
+    const lower = raw.toLowerCase()
+    if (lower === "bedsitter" || lower === "studio") return "Bedsitter"
+    if (/^\d+bed(room)?$/i.test(lower)) {
+      const n = lower.match(/\d+/)?.[0] ?? ""
+      return `${n} Bedroom`
+    }
+    return raw
+  }
+
+  const getDistanceKm = (
+    items: Array<{ amenity_type: string; amenity_type_display?: string; distance_km: number }>,
+    target: "ROAD" | "SCHOOL" | "MARKET",
+  ) => {
+    const t = target.toUpperCase()
+    const hit = items.find((x) => {
+      const raw = String(x.amenity_type || "").toUpperCase()
+      const disp = String(x.amenity_type_display || "").toUpperCase()
+      return raw === t || raw.includes(t) || disp.includes(t)
+    })
+    if (!hit || !Number.isFinite(hit.distance_km) || hit.distance_km <= 0) return "--"
+    return `${hit.distance_km} km`
+  }
+
+  const collectImages = (apt: BackendApartment) => {
+    const urls: string[] = []
+    const push = (u?: string | null) => {
+      const v = absolutizeUrl(u)
+      if (v) urls.push(v)
+    }
+    push(apt.exterior_image_url)
+    push(apt.exterior_image)
+    for (const unit of apt.units ?? []) {
+      const interior = (unit as any).interior_images
+      const exterior = (unit as any).exterior_images
+      if (Array.isArray(interior)) for (const u of interior) if (typeof u === "string") push(u)
+      if (Array.isArray(exterior)) for (const u of exterior) if (typeof u === "string") push(u)
+    }
+    return Array.from(new Set(urls)).filter(Boolean)
+  }
+
+  const property = useMemo(() => {
+    if (!apartment) return null
+    const unit = cheapestUnit(apartment.units)
+    const price = Number(unit?.price_per_month ?? 0)
+    const size = Number(unit?.size_sqft ?? 0)
+    const bedrooms = parseBedrooms((unit as any)?.type ?? null)
+    const bathrooms = 1
+    const verified = (apartment.verification_status ?? "").toString().toUpperCase() === "VERIFIED"
+    const images = collectImages(apartment)
+    const latNum = typeof apartment.latitude === "number" ? apartment.latitude : Number(apartment.latitude ?? 0)
+    const lngNum = typeof apartment.longitude === "number" ? apartment.longitude : Number(apartment.longitude ?? 0)
+    const hasCoords = Number.isFinite(latNum) && Number.isFinite(lngNum) && (latNum !== 0 || lngNum !== 0)
+    const landlord = apartment.landlord_info
+    const landlordName = (landlord?.full_name || landlord?.username || "").toString().trim()
+    return {
+      id: apartment.id,
+      title: apartment.name,
+      location: apartment.address || "No address provided",
+      area: apartment.address || "",
+      price,
+      bedrooms,
+      bathrooms,
+      size,
+      images: images.length ? images : ["/placeholder.svg"],
+      amenities: (apartment.amenities ?? []).map((a) => a.name).filter(Boolean),
+      rating: typeof apartment.average_rating === "number" ? apartment.average_rating : 0,
+      reviews: typeof apartment.review_count === "number" ? apartment.review_count : 0,
+      verified,
+      description: apartment.overview_description || "",
+      rules: apartment.rules_and_policies || "",
+      virtualTourUrl: apartment.virtual_tour_url || "",
+      amenityDistances: (apartment.amenity_distances ?? []).map((d) => ({
+        amenity_type: String(d.amenity_type || ""),
+        amenity_type_display: d.amenity_type_display ? String(d.amenity_type_display) : undefined,
+        distance_km: Number(d.distance_km ?? 0),
+        nearest_name: d.nearest_name ? String(d.nearest_name) : undefined,
+      })),
+      leaseAgreementUrl: apartment.lease_agreement?.document ? absolutizeUrl(apartment.lease_agreement.document) : "",
+      highlights: [] as string[],
+      features: [] as string[],
+      hasBalcony: false,
+      walkToTransit: 0,
+      walkToMainRoad: 0,
+      mapLocation: {
+        lat: hasCoords ? latNum : 0,
+        lng: hasCoords ? lngNum : 0,
+        address: apartment.address || "",
+      },
+      landlord: {
+        name: landlordName || `Landlord ${(apartment.landlord ?? "").toString().slice(0, 8)}`,
+        avatar: "",
+        verified: false,
+        joinedDate: "",
+        phone: landlord?.phone_number ? String(landlord.phone_number) : "",
+        email: landlord?.email ? String(landlord.email) : "",
+      },
+    }
+  }, [apartment])
+
+  const availableUnits = useMemo(() => {
+    if (!apartment?.units?.length) return []
+    return apartment.units.map((u) => {
+      const interior = Array.isArray((u as any).interior_images) ? ((u as any).interior_images as string[]) : []
+      const exterior = Array.isArray((u as any).exterior_images) ? ((u as any).exterior_images as string[]) : []
+      const images = [...interior, ...exterior].map((img) => absolutizeUrl(img)).filter(Boolean)
+      const rent = Number((u as any).price_per_month ?? 0)
+      const size = Number((u as any).size_sqft ?? 0)
+      const status = String((u as any).status ?? "VACANT").toUpperCase()
+      return {
+        id: String(u.id),
+        unitNumber: String((u as any).unit_number_or_id ?? ""),
+        typeLabel: toUnitTypeLabel((u as any).type),
+        rent,
+        size,
+        status,
+        images,
+      }
+    })
+  }, [apartment, absolutizeUrl])
+
+  useEffect(() => {
+    let cancelled = false
+    const load = async () => {
+      if (!slug) return
+      setLoading(true)
+      setLoadError(null)
+      try {
+        const [apt, all] = await Promise.all([backendGetApartment(slug), backendListApartments()])
+        if (cancelled) return
+        setApartment(apt)
+        setSimilar((all ?? []).filter((a) => a?.id && a.id !== apt.id).slice(0, 4))
+      } catch (err) {
+        const msg =
+          err instanceof ApiError && err.status === 404
+            ? "Property not found."
+            : err instanceof Error
+              ? err.message
+              : "Failed to load property."
+        if (!cancelled) {
+          setLoadError(msg)
+          setApartment(null)
+          setSimilar([])
+        }
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    void load()
+    return () => {
+      cancelled = true
+    }
+  }, [slug])
 
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
   const [showAllPhotos, setShowAllPhotos] = useState(false)
   const [isFavorite, setIsFavorite] = useState(false)
-  const [checkIn, setCheckIn] = useState("")
-  const [checkOut, setCheckOut] = useState("")
-  const [guests, setGuests] = useState(1)
   const [banner, setBanner] = useState<{ title: string; message: string } | null>(null)
 
   const [contactOpen, setContactOpen] = useState(false)
@@ -56,12 +241,36 @@ export default function PropertyDetail() {
   const [reportDetails, setReportDetails] = useState("")
   const [reportEmail, setReportEmail] = useState("")
 
+  useEffect(() => {
+    if (!property?.id) return
+    setIsFavorite(getFavorites().includes(property.id))
+  }, [property?.id])
+
+  const whatsappPhone = useMemo(() => {
+    const raw = property?.landlord?.phone || ""
+    const digits = raw.replace(/[^\d]/g, "")
+    if (digits.startsWith("0")) return `254${digits.slice(1)}`
+    if (digits.startsWith("254")) return digits
+    if (digits.startsWith("7") || digits.startsWith("1")) return `254${digits}`
+    return digits
+  }, [property?.landlord?.phone])
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background pt-24 flex items-center justify-center">
+        <p className="text-sm text-muted-foreground font-nunito">Loading property...</p>
+      </div>
+    )
+  }
+
   if (!property) {
     return (
       <div className="min-h-screen bg-background pt-24 flex items-center justify-center">
         <div className="text-center">
           <h1 className="text-2xl font-bold mb-2 font-montserrat">Property Not Found</h1>
-          <p className="text-muted-foreground mb-4 font-nunito">The property you're looking for doesn't exist.</p>
+          <p className="text-muted-foreground mb-4 font-nunito">
+            {loadError || "The property you're looking for doesn't exist."}
+          </p>
           <Link href={PageRoutes.PROPERTIES}>
             <Button className="tyrent-gradient text-white font-montserrat">Browse All Properties</Button>
           </Link>
@@ -70,29 +279,12 @@ export default function PropertyDetail() {
     )
   }
 
-  useEffect(() => {
-    setIsFavorite(getFavorites().includes(property.id))
-  }, [property.id])
-
-  const whatsappPhone = useMemo(() => {
-    const raw = property.landlord.phone || ""
-    const digits = raw.replace(/[^\d]/g, "")
-    if (digits.startsWith("0")) return `254${digits.slice(1)}`
-    if (digits.startsWith("254")) return digits
-    if (digits.startsWith("7") || digits.startsWith("1")) return `254${digits}`
-    return digits
-  }, [property.landlord.phone])
-
   const nextImage = () => {
     setCurrentImageIndex((prev) => (prev + 1) % property.images.length)
   }
 
   const prevImage = () => {
     setCurrentImageIndex((prev) => (prev - 1 + property.images.length) % property.images.length)
-  }
-
-  const handleBooking = () => {
-    router.push(`${PageRoutes.BOOKING}/${property.id}`)
   }
 
   const handleShare = async () => {
@@ -132,6 +324,14 @@ export default function PropertyDetail() {
       setBanner({ title: "Message incomplete", message: "Please add a subject and message." })
       return
     }
+    if (!property.landlord.email) {
+      setContactOpen(false)
+      setBanner({
+        title: "Contact not available",
+        message: "This listing doesn't include landlord contact details yet.",
+      })
+      return
+    }
     setContactOpen(false)
     setBanner({ title: "Draft saved", message: "Opening your email app with the message." })
     const mailto = `mailto:${encodeURIComponent(property.landlord.email)}?subject=${encodeURIComponent(
@@ -166,22 +366,29 @@ export default function PropertyDetail() {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
         >
-          <div className="container mx-auto px-4 py-8">
-            <div className="flex items-center justify-between mb-6">
-              <Button variant="ghost" size="icon" onClick={() => setShowAllPhotos(false)} className="rounded-full">
-                <X className="h-6 w-6" />
+          <div className="sticky top-0 z-10 border-b border-border/60 bg-background/95 backdrop-blur">
+            <div className="container mx-auto px-4 py-3 flex items-center justify-between">
+              <h2 className="text-lg md:text-xl font-bold font-montserrat">All Photos</h2>
+              <Button
+                variant="outline"
+                onClick={() => setShowAllPhotos(false)}
+                className="font-nunito bg-transparent h-9 px-3"
+              >
+                <X className="h-4 w-4 mr-1" />
+                Close
               </Button>
-              <h2 className="text-xl font-bold font-montserrat">All Photos</h2>
-              <div className="w-10"></div>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          </div>
+          <div className="container mx-auto px-4 py-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
               {property.images.map((image, index) => (
-                <img
-                  key={index}
-                  src={image || "/placeholder.svg"}
-                  alt={`${property.title} - Photo ${index + 1}`}
-                  className="w-full h-auto rounded-lg"
-                />
+                <div key={index} className="rounded-lg overflow-hidden border border-border/50 bg-muted/30">
+                  <img
+                    src={image || "/placeholder.svg"}
+                    alt={`${property.title} - Photo ${index + 1}`}
+                    className="w-full h-56 md:h-64 object-cover"
+                  />
+                </div>
               ))}
             </div>
           </div>
@@ -259,17 +466,17 @@ export default function PropertyDetail() {
 
         {/* Image Gallery */}
         <div className="mb-8">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-2 rounded-2xl overflow-hidden">
+          <div className="grid grid-cols-1 md:grid-cols-4 md:auto-rows-[140px] gap-2 rounded-2xl overflow-hidden">
             <div className="md:col-span-2 md:row-span-2 relative group">
               <img
                 src={property.images[0] || "/placeholder.svg"}
                 alt={property.title}
-                className="w-full h-full object-cover cursor-pointer hover:brightness-95 transition-all"
+                className="w-full h-72 md:h-full object-cover cursor-pointer hover:brightness-95 transition-all"
                 onClick={() => setShowAllPhotos(true)}
               />
             </div>
             {property.images.slice(1, 5).map((image, index) => (
-              <div key={index} className="relative group cursor-pointer h-48 md:h-auto">
+              <div key={index} className="relative group cursor-pointer h-40 md:h-full">
                 <img
                   src={image || "/placeholder.svg"}
                   alt={`${property.title} - View ${index + 2}`}
@@ -336,9 +543,11 @@ export default function PropertyDetail() {
                   <div className="bg-card p-4 rounded-lg shadow-md">
                     <div className="flex items-center text-muted-foreground mb-2">
                       <Clock className="h-5 w-5 mr-2" />
-                      <span className="text-sm">To Transit</span>
+                      <span className="text-sm">To main road</span>
                     </div>
-                    <p className="text-2xl font-bold text-foreground font-montserrat">{property.walkToTransit} min</p>
+                    <p className="text-2xl font-bold text-foreground font-montserrat">
+                      {getDistanceKm(property.amenityDistances ?? [], "ROAD")}
+                    </p>
                   </div>
                 </div>
 
@@ -355,41 +564,72 @@ export default function PropertyDetail() {
                       </div>
                       <div className="grid grid-cols-2 gap-4">
                         <div>
-                          <p className="text-sm text-muted-foreground mb-1">To Main Road</p>
+                          <p className="text-sm text-muted-foreground mb-1">To main road</p>
                           <p className="text-lg font-bold text-foreground font-montserrat">
-                            {property.walkToMainRoad} min
+                            {getDistanceKm(property.amenityDistances ?? [], "ROAD")}
                           </p>
                         </div>
                         <div>
-                          <p className="text-sm text-muted-foreground mb-1">To Transit</p>
+                          <p className="text-sm text-muted-foreground mb-1">To school</p>
                           <p className="text-lg font-bold text-foreground font-montserrat">
-                            {property.walkToTransit} min
+                            {getDistanceKm(property.amenityDistances ?? [], "SCHOOL")}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4 pt-2">
+                        <div>
+                          <p className="text-sm text-muted-foreground mb-1">To market</p>
+                          <p className="text-lg font-bold text-foreground font-montserrat">
+                            {getDistanceKm(property.amenityDistances ?? [], "MARKET")}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-muted-foreground mb-1">Nearest</p>
+                          <p className="text-sm text-muted-foreground font-nunito line-clamp-2">
+                            {(() => {
+                              const d = (property.amenityDistances ?? [])[0]
+                              return d?.nearest_name ? d.nearest_name : "—"
+                            })()}
                           </p>
                         </div>
                       </div>
                     </div>
                   </div>
 
-                  <div className="bg-card p-6 rounded-lg shadow-md">
-                    <h3 className="text-lg font-bold text-foreground mb-4 font-montserrat flex items-center">
-                      <Home className="h-5 w-5 mr-2 text-primary" />
-                      Special Features
-                    </h3>
-                    <div className="space-y-2">
-                      {property.hasBalcony && (
-                        <div className="flex items-center text-foreground">
-                          <CheckCircle2 className="h-5 w-5 mr-2 text-green-500" />
-                          <span className="font-nunito">Balcony</span>
+                  {(property.rules?.trim() || property.leaseAgreementUrl || property.virtualTourUrl) && (
+                    <div className="bg-card p-6 rounded-lg shadow-md">
+                      <h3 className="text-lg font-bold text-foreground mb-4 font-montserrat flex items-center">
+                        <Home className="h-5 w-5 mr-2 text-primary" />
+                        Documents & rules
+                      </h3>
+                      <div className="space-y-3">
+                        {property.rules?.trim() && (
+                          <div>
+                            <p className="text-sm text-muted-foreground mb-1 font-nunito">Rules & policies</p>
+                            <p className="text-sm text-foreground font-nunito whitespace-pre-wrap">{property.rules}</p>
+                          </div>
+                        )}
+                        <div className="flex flex-wrap gap-2">
+                          {property.leaseAgreementUrl && (
+                            <Button asChild variant="outline" size="sm" className="font-nunito bg-transparent">
+                              <a href={property.leaseAgreementUrl} target="_blank" rel="noreferrer">
+                                <FileText className="h-4 w-4 mr-1" />
+                                Lease (PDF)
+                              </a>
+                            </Button>
+                          )}
+                          {property.virtualTourUrl && (
+                            <Button asChild variant="outline" size="sm" className="font-nunito bg-transparent">
+                              <a href={property.virtualTourUrl} target="_blank" rel="noreferrer">
+                                <Video className="h-4 w-4 mr-1" />
+                                Virtual tour
+                              </a>
+                            </Button>
+                          )}
                         </div>
-                      )}
-                      {property.features.map((feature) => (
-                        <div key={feature} className="flex items-center text-foreground">
-                          <CheckCircle2 className="h-5 w-5 mr-2 text-green-500" />
-                          <span className="font-nunito">{feature}</span>
-                        </div>
-                      ))}
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
 
                 <div className="border-t border-border pt-6">
@@ -402,30 +642,15 @@ export default function PropertyDetail() {
             </Card>
 
             {/* Amenities */}
-            <Card>
-              <CardContent className="p-6">
-                <h2 className="text-2xl font-bold mb-4 font-montserrat">Amenities</h2>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                  {property.amenities.map((amenity, index) => (
-                    <div key={index} className="flex items-center gap-2 p-3 bg-muted rounded-lg">
-                      <CheckCircle2 className="h-5 w-5 text-green-500" />
-                      <span className="font-nunito">{amenity}</span>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Highlights */}
-            {property.highlights && (
+            {property.amenities.length > 0 && (
               <Card>
                 <CardContent className="p-6">
-                  <h2 className="text-2xl font-bold mb-4 font-montserrat">Highlights</h2>
-                  <div className="space-y-3">
-                    {property.highlights.map((highlight, index) => (
-                      <div key={index} className="flex items-start gap-3">
-                        <CheckCircle2 className="h-5 w-5 text-primary mt-0.5 shrink-0" />
-                        <span className="font-nunito">{highlight}</span>
+                  <h2 className="text-2xl font-bold mb-4 font-montserrat">Amenities</h2>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                    {property.amenities.map((amenity, index) => (
+                      <div key={index} className="flex items-center gap-2 p-3 bg-muted rounded-lg">
+                        <CheckCircle2 className="h-5 w-5 text-green-500" />
+                        <span className="font-nunito">{amenity}</span>
                       </div>
                     ))}
                   </div>
@@ -433,156 +658,138 @@ export default function PropertyDetail() {
               </Card>
             )}
 
-            {/* Landlord Info */}
+            {availableUnits.length > 0 && (
+              <Card>
+                <CardContent className="p-6">
+                  <h2 className="text-2xl font-bold mb-4 font-montserrat">Available units</h2>
+                  <div className="space-y-4">
+                    {availableUnits.map((unit) => (
+                      <div key={unit.id} className="rounded-xl border border-border p-4">
+                        <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+                          <div>
+                            <p className="font-semibold text-foreground font-montserrat">
+                              {unit.unitNumber ? `Unit ${unit.unitNumber}` : "Unit"}
+                            </p>
+                            <p className="text-sm text-muted-foreground font-nunito">{unit.typeLabel}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-lg font-bold text-foreground font-montserrat">
+                              {unit.rent ? `KES ${unit.rent.toLocaleString()}` : "KES --"}
+                            </p>
+                            <p className="text-xs text-muted-foreground font-nunito">per month</p>
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2 mb-3">
+                          <Badge variant={unit.status === "VACANT" ? "default" : "secondary"} className="font-nunito">
+                            {unit.status}
+                          </Badge>
+                          {unit.size > 0 && (
+                            <Badge variant="outline" className="font-nunito">
+                              <Maximize className="h-3.5 w-3.5 mr-1" />
+                              {unit.size} sqft
+                            </Badge>
+                          )}
+                        </div>
+                        {unit.images.length > 0 && (
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                            {unit.images.slice(0, 4).map((img, idx) => (
+                              <img
+                                key={`${unit.id}-img-${idx}`}
+                                src={img}
+                                alt={`${property.title} ${unit.unitNumber} ${idx + 1}`}
+                                className="w-full h-24 object-cover rounded-md"
+                              />
+                            ))}
+                          </div>
+                        )}
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <Button asChild variant="outline" size="sm" className="font-nunito bg-transparent">
+                            <Link href={`/virtual-tour/${property.id}?unit=${encodeURIComponent(unit.id)}`}>
+                              <Video className="h-4 w-4 mr-1" />
+                              Virtual tour
+                            </Link>
+                          </Button>
+                          <Button asChild size="sm" className="tyrent-gradient text-white font-nunito">
+                            <Link href={`${PageRoutes.BOOKING(property.id)}?unit=${encodeURIComponent(unit.id)}`}>
+                              Book this unit
+                            </Link>
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Highlights removed (not in backend payload) */}
+
+            {/* Landlord contact - Only show name */}
             <Card>
               <CardContent className="p-6">
-                <h2 className="text-2xl font-bold mb-4 font-montserrat">Meet your landlord</h2>
-                <div className="flex items-start gap-4">
-                  <Avatar className="h-16 w-16">
-                    <AvatarImage src={property.landlord.avatar || "/placeholder.svg"} alt={property.landlord.name} />
-                    <AvatarFallback>{property.landlord.name.charAt(0)}</AvatarFallback>
+                <h2 className="text-2xl font-bold mb-3 font-montserrat">Landlord</h2>
+                <div className="flex items-start gap-3">
+                  <Avatar className="h-10 w-10">
+                    <AvatarFallback>{property.landlord.name.charAt(0).toUpperCase()}</AvatarFallback>
                   </Avatar>
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <h3 className="font-bold font-montserrat">{property.landlord.name}</h3>
-                      {property.landlord.verified && (
-                        <Badge variant="outline" className="text-green-500 border-green-500">
-                          <CheckCircle2 className="h-3 w-3 mr-1" />
-                          Verified
-                        </Badge>
-                      )}
-                    </div>
-                    <p className="text-sm text-muted-foreground mb-3 font-nunito">{property.landlord.joinedDate}</p>
-                    <div className="flex flex-wrap gap-2">
-                      <Button size="sm" className="tyrent-gradient text-white font-nunito" onClick={openContact}>
-                        <MessageCircle className="h-4 w-4 mr-2" />
-                        Message
-                      </Button>
-                      <Button asChild size="sm" variant="outline" className="font-nunito bg-transparent">
-                        <a href={`tel:${property.landlord.phone}`}>
-                        <Phone className="h-4 w-4 mr-2" />
-                        Call
-                        </a>
-                      </Button>
-                      <Button asChild size="sm" variant="outline" className="font-nunito bg-transparent">
-                        <a href={`mailto:${property.landlord.email}`}>
-                        <Mail className="h-4 w-4 mr-2" />
-                        Email
-                        </a>
-                      </Button>
-                      {whatsappPhone && (
-                        <Button asChild size="sm" variant="outline" className="font-nunito bg-transparent">
-                          <a href={`https://wa.me/${whatsappPhone}`} target="_blank" rel="noreferrer">
-                            WhatsApp
-                          </a>
-                        </Button>
-                      )}
-                    </div>
+                  <div className="space-y-1 text-sm font-nunito">
+                    <p className="text-foreground font-semibold">{property.landlord.name}</p>
+                    {/* Contact information hidden - will be displayed after booking confirmation */}
                   </div>
                 </div>
               </CardContent>
             </Card>
           </div>
 
-          {/* Booking Card - Sticky */}
           <div className="lg:col-span-1">
             <Card className="sticky top-24 shadow-xl">
               <CardContent className="p-6">
-                <div className="mb-6">
-                  <div className="flex items-baseline gap-2 mb-2">
-                    <span className="text-3xl font-bold font-montserrat">
-                      KES {(property.price / 1000).toFixed(0)}K
-                    </span>
-                    <span className="text-muted-foreground font-nunito">/ month</span>
-                  </div>
-                  <div className="flex items-center gap-1 text-sm">
-                    <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
-                    <span className="font-semibold font-nunito">{property.rating}</span>
-                    <span className="text-muted-foreground font-nunito">({property.reviews} reviews)</span>
-                  </div>
-                </div>
-
-                <div className="space-y-4 mb-6">
-                  <div>
-                    <label className="text-sm font-medium mb-2 block font-montserrat">Move-in Date</label>
-                    <input
-                      type="date"
-                      value={checkIn}
-                      onChange={(e) => setCheckIn(e.target.value)}
-                      className="w-full px-3 py-2 border border-border rounded-lg bg-background font-nunito"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium mb-2 block font-montserrat">Guests</label>
-                    <input
-                      type="number"
-                      min="1"
-                      value={guests}
-                      onChange={(e) => setGuests(Number.parseInt(e.target.value))}
-                      className="w-full px-3 py-2 border border-border rounded-lg bg-background font-nunito"
-                    />
-                  </div>
-                </div>
-
-                <Button
-                  onClick={handleBooking}
-                  className="w-full tyrent-gradient text-white mb-4 py-6 text-lg font-montserrat hover:opacity-90 transition-opacity"
-                >
-                  Book Now
+                <h3 className="text-xl font-bold text-foreground mb-2 font-montserrat">Ready to book?</h3>
+                <p className="text-sm text-muted-foreground mb-4 font-nunito">
+                  Choose a unit above for exact pricing, photos, and direct booking.
+                </p>
+                <Button asChild className="w-full tyrent-gradient text-white font-nunito">
+                  <Link href={PageRoutes.BOOKING(property.id)}>Go to booking page</Link>
                 </Button>
-
-                <p className="text-center text-sm text-muted-foreground font-nunito">You won't be charged yet</p>
-
-                <div className="mt-6 pt-6 border-t border-border space-y-2 text-sm">
-                  <div className="flex justify-between font-nunito">
-                    <span className="text-muted-foreground">Deposit</span>
-                    <span className="font-semibold">KES {((property.price * 2) / 1000).toFixed(0)}K</span>
-                  </div>
-                  <div className="flex justify-between font-nunito">
-                    <span className="text-muted-foreground">Service fee</span>
-                    <span className="font-semibold">KES 5K</span>
-                  </div>
-                </div>
               </CardContent>
             </Card>
           </div>
         </div>
 
         {/* Similar Properties */}
-        {similarProperties.length > 0 && (
+        {similar.length > 0 && (
           <div className="mt-16">
             <h2 className="text-3xl font-bold mb-8 font-montserrat">Similar Properties</h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {similarProperties.map(
-                (similar) =>
-                  similar && (
-                    <Link key={similar.id} href={`${PageRoutes.PROPERTIES}/${similar.slug}`}>
-                      <Card className="overflow-hidden border-0 shadow-lg hover:shadow-2xl transition-all duration-300 tyrent-card-hover cursor-pointer">
-                        <img
-                          src={similar.images[0] || "/placeholder.svg"}
-                          alt={similar.title}
-                          className="w-full h-48 object-cover"
-                        />
-                        <CardContent className="p-4">
-                          <h3 className="font-bold text-lg mb-2 font-montserrat line-clamp-1">{similar.title}</h3>
-                          <div className="flex items-center gap-1 text-sm text-muted-foreground mb-2 font-nunito">
-                            <MapPin className="h-4 w-4" />
-                            {similar.location}
+              {similar.map((apt) => {
+                const u = cheapestUnit(apt.units)
+                const p = Number((u as any)?.price_per_month ?? 0)
+                const img = absolutizeUrl(apt.exterior_image_url || apt.exterior_image) || "/placeholder.svg"
+                const r = typeof apt.average_rating === "number" ? apt.average_rating : 0
+                return (
+                  <Link key={apt.id} href={`${PageRoutes.PROPERTIES}/${apt.id}`}>
+                    <Card className="overflow-hidden border-0 shadow-lg hover:shadow-2xl transition-all duration-300 tyrent-card-hover cursor-pointer">
+                      <img src={img} alt={apt.name} className="w-full h-48 object-cover" />
+                      <CardContent className="p-4">
+                        <h3 className="font-bold text-lg mb-2 font-montserrat line-clamp-1">{apt.name}</h3>
+                        <div className="flex items-center gap-1 text-sm text-muted-foreground mb-2 font-nunito">
+                          <MapPin className="h-4 w-4" />
+                          {apt.address || "No address provided"}
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1">
+                            <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
+                            <span className="font-semibold font-nunito">{r ? r.toFixed(1) : "--"}</span>
                           </div>
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-1">
-                              <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
-                              <span className="font-semibold font-nunito">{similar.rating}</span>
-                            </div>
-                            <span className="text-xl font-bold font-montserrat">
-                              KES {(similar.price / 1000).toFixed(0)}K
-                            </span>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    </Link>
-                  ),
-              )}
+                          <span className="text-xl font-bold font-montserrat">
+                            {p ? `KES ${(p / 1000).toFixed(0)}K` : "KES --"}
+                          </span>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </Link>
+                )
+              })}
             </div>
           </div>
         )}

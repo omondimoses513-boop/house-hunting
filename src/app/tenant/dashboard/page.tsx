@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { useEffect, useMemo, useState } from "react"
 import { motion } from "framer-motion"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -11,29 +11,22 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   DollarSign,
   FileText,
-  MessageSquare,
   AlertCircle,
   CheckCircle2,
   Clock,
   MapPin,
   Phone,
-  Mail,
   Download,
-  CreditCard,
   Wrench,
+  MessageCircle,
 } from "lucide-react"
 import { PageRoutes } from "@/constants/page-routes"
 import {
-  addTenantMaintenanceRequest,
-  addTenantMessage,
-  addTenantPayment,
-  generateId,
   getTenantDocuments,
   getTenantLease,
   getTenantMaintenanceRequests,
   getTenantPayments,
   seedTenantDemoDataIfEmpty,
-  type MaintenancePriority,
   type TenantDocument,
   type TenantLease,
   type TenantMaintenanceRequest,
@@ -41,6 +34,8 @@ import {
 } from "@/lib/tenant-storage"
 import { requireAuth } from "@/lib/route-guards"
 import { backendTenantDashboard, type BackendTenantDashboard } from "@/lib/api/dashboard"
+import { backendTenantBookings } from "@/lib/api/bookings"
+import { backendListApartments, type BackendApartment } from "@/lib/api/properties"
 
 function daysUntil(dateIso: string) {
   const target = new Date(dateIso)
@@ -65,6 +60,7 @@ function downloadText(filename: string, content: string) {
 
 export default function TenantDashboard() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [selectedTab, setSelectedTab] = useState("overview")
   const [banner, setBanner] = useState<{ title: string; message: string } | null>(null)
 
@@ -73,19 +69,7 @@ export default function TenantDashboard() {
   const [maintenanceRequests, setMaintenanceRequests] = useState<TenantMaintenanceRequest[]>([])
   const [documents, setDocuments] = useState<TenantDocument[]>([])
 
-  const [payOpen, setPayOpen] = useState(false)
-  const [payAmount, setPayAmount] = useState<number>(0)
-  const [payMethod, setPayMethod] = useState<"M-Pesa" | "Card" | "Bank">("M-Pesa")
-  const [payNote, setPayNote] = useState("")
-
-  const [maintenanceOpen, setMaintenanceOpen] = useState(false)
-  const [maintenanceTitle, setMaintenanceTitle] = useState("")
-  const [maintenanceCategory, setMaintenanceCategory] = useState("General")
-  const [maintenancePriority, setMaintenancePriority] = useState<MaintenancePriority>("medium")
-  const [maintenanceDescription, setMaintenanceDescription] = useState("")
-
   const [messageOpen, setMessageOpen] = useState(false)
-  const [messageSubject, setMessageSubject] = useState("")
   const [messageBody, setMessageBody] = useState("")
 
   const [detailsRequest, setDetailsRequest] = useState<TenantMaintenanceRequest | null>(null)
@@ -99,13 +83,105 @@ export default function TenantDashboard() {
     }
     const loadTenantData = async () => {
       try {
-        const data = await backendTenantDashboard()
+        const [data, bookings, apartments] = await Promise.all([
+          backendTenantDashboard(),
+          backendTenantBookings().catch(() => []),
+          backendListApartments().catch(() => []),
+        ])
+        const apartmentList = Array.isArray(apartments) ? apartments : []
+        const unitMap = new Map<
+          string,
+          {
+            unitNumber: string
+            property: string
+            location: string
+            rent: number
+            imageUrl?: string
+            landlord: TenantLease["landlord"]
+          }
+        >()
+        const apiBase = (process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:8000").replace(/\/+$/, "")
+        const abs = (url?: string | null) =>
+          !url ? "" : url.startsWith("http://") || url.startsWith("https://") ? url : `${apiBase}${url.startsWith("/") ? "" : "/"}${url}`
+
+        for (const apt of apartmentList as BackendApartment[]) {
+          const landlord = {
+            name: apt.landlord_info?.full_name || apt.landlord_info?.username || "Landlord",
+            phone: apt.landlord_info?.phone_number || "",
+            email: apt.landlord_info?.email || "landlord@example.com",
+            verified: String(apt.verification_status || "").toUpperCase() === "VERIFIED",
+          }
+          for (const unit of apt.units ?? []) {
+            const interior = Array.isArray((unit as any).interior_images) ? ((unit as any).interior_images as string[]) : []
+            const exterior = Array.isArray((unit as any).exterior_images) ? ((unit as any).exterior_images as string[]) : []
+            const unitImage = interior[0] || exterior[0] || apt.exterior_image_url || apt.exterior_image
+            unitMap.set(String(unit.id), {
+              unitNumber: String((unit as any).unit_number_or_id ?? unit.id).slice(0, 16),
+              property: apt.name,
+              location: apt.address || "No address provided",
+              rent: Number((unit as any).price_per_month ?? 0),
+              imageUrl: abs(unitImage),
+              landlord,
+            })
+          }
+        }
+
+        const backendPayments: TenantPayment[] = (Array.isArray(bookings) ? bookings : []).map((b) => {
+          const paid = String(b.payment_status || "").toUpperCase() === "COMPLETED"
+          const failed = String(b.payment_status || "").toUpperCase() === "FAILED"
+          return {
+            id: String(b.id),
+            date: String((b.created_at || b.reservation_date || "").slice(0, 10) || new Date().toISOString().slice(0, 10)),
+            amount: Number(b.booking_amount ?? 0),
+            status: paid ? "paid" : failed ? "failed" : "pending",
+            method: "M-Pesa",
+            reference: String(b.booking_confirmation_code || b.id).slice(0, 16),
+            note: `Booking ${b.booking_status || "PENDING"}`,
+          }
+        })
+
+        const activeBooking = (Array.isArray(bookings) ? bookings : []).find((b) => {
+          const s = String(b.booking_status || "").toUpperCase()
+          return s === "CONFIRMED" || s === "PAID" || s === "PENDING"
+        })
+        const activeUnit = activeBooking ? unitMap.get(String(activeBooking.unit)) : null
+        const backendLease: TenantLease | null =
+          activeBooking && activeUnit
+            ? {
+                id: String(activeBooking.id),
+                propertyId: String(activeBooking.id),
+                property: activeUnit.property,
+                unit: activeUnit.unitNumber,
+                location: activeUnit.location,
+                landlord: activeUnit.landlord,
+                rent: activeUnit.rent,
+                deposit: activeUnit.rent * 2,
+                leaseStart: String(activeBooking.move_in_date || ""),
+                leaseEnd: "",
+                nextPaymentDue: String(activeBooking.move_in_date || ""),
+                imageUrl: activeUnit.imageUrl,
+              }
+            : null
+
         setBackendTenant(data)
         // Backend-first mode: avoid showing seeded local demo/bulk data.
-        setLease(null)
-        setPaymentHistory([])
+        setLease(backendLease)
+        setPaymentHistory(backendPayments)
         setMaintenanceRequests([])
-        setDocuments([])
+        setDocuments(
+          activeBooking?.lease_agreement
+            ? [
+                {
+                  id: String(activeBooking.id),
+                  name: "Lease Agreement",
+                  type: "PDF",
+                  size: "--",
+                  uploadedDate: String(activeBooking.created_at || "").slice(0, 10),
+                  content: String(activeBooking.lease_agreement),
+                },
+              ]
+            : [],
+        )
       } catch {
         // Fallback to local demo storage only if backend tenant endpoint is unavailable.
         seedTenantDemoDataIfEmpty()
@@ -117,6 +193,13 @@ export default function TenantDashboard() {
     }
     void loadTenantData()
   }, [])
+
+  useEffect(() => {
+    const tab = (searchParams.get("tab") || "").toLowerCase()
+    if (tab === "overview" || tab === "payments" || tab === "maintenance" || tab === "documents") {
+      setSelectedTab(tab)
+    }
+  }, [searchParams])
 
   const currentLease = lease
 
@@ -147,76 +230,9 @@ export default function TenantDashboard() {
     return "text-green-600"
   }, [daysUntilPayment])
 
-  const openPay = (amount?: number) => {
-    if (!currentLease) return
-    setPayAmount(typeof amount === "number" ? amount : currentLease.rent)
-    setPayMethod("M-Pesa")
-    setPayNote("")
-    setPayOpen(true)
-  }
 
-  const submitPayment = () => {
-    if (!currentLease) return
-    if (!payAmount || payAmount <= 0) {
-      setBanner({ title: "Payment amount required", message: "Please enter a valid amount." })
-      return
-    }
 
-    const payment: TenantPayment = {
-      id: generateId("payment"),
-      date: new Date().toISOString().slice(0, 10),
-      amount: payAmount,
-      status: "paid",
-      method: payMethod,
-      reference: `TYR-PAY-${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
-      note: payNote.trim() || undefined,
-    }
-    setPaymentHistory(addTenantPayment(payment))
-    setPayOpen(false)
-    setBanner({ title: "Payment recorded", message: `Recorded KES ${payAmount.toLocaleString()} via ${payMethod}.` })
-  }
 
-  const submitMaintenance = () => {
-    if (!maintenanceTitle.trim() || !maintenanceDescription.trim()) {
-      setBanner({ title: "Missing details", message: "Please add a title and description for your request." })
-      return
-    }
-    const req: TenantMaintenanceRequest = {
-      id: generateId("maintenance"),
-      title: maintenanceTitle.trim(),
-      description: maintenanceDescription.trim(),
-      status: "pending",
-      priority: maintenancePriority,
-      submittedDate: new Date().toISOString().slice(0, 10),
-      category: maintenanceCategory.trim() || "General",
-    }
-    setMaintenanceRequests(addTenantMaintenanceRequest(req))
-    setMaintenanceOpen(false)
-    setMaintenanceTitle("")
-    setMaintenanceCategory("General")
-    setMaintenancePriority("medium")
-    setMaintenanceDescription("")
-    setSelectedTab("maintenance")
-    setBanner({ title: "Request submitted", message: "Your maintenance request has been sent to the landlord." })
-  }
-
-  const submitMessage = () => {
-    if (!messageSubject.trim() || !messageBody.trim()) {
-      setBanner({ title: "Message incomplete", message: "Please add a subject and message body." })
-      return
-    }
-    addTenantMessage({
-      id: generateId("message"),
-      createdAt: new Date().toISOString(),
-      to: "landlord",
-      subject: messageSubject.trim(),
-      body: messageBody.trim(),
-    })
-    setMessageOpen(false)
-    setMessageSubject("")
-    setMessageBody("")
-    setBanner({ title: "Message saved", message: "Your message was saved. You can also email your landlord directly." })
-  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -285,7 +301,7 @@ export default function TenantDashboard() {
                       <Badge className="tyrent-gradient text-white border-0">Active Lease</Badge>
                     </div>
 
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
                       <div>
                         <p className="text-sm text-muted-foreground mb-1 font-nunito">Monthly Rent</p>
                         <p className="text-lg font-bold text-foreground font-montserrat">
@@ -293,17 +309,15 @@ export default function TenantDashboard() {
                         </p>
                       </div>
                       <div>
-                        <p className="text-sm text-muted-foreground mb-1 font-nunito">Lease Period</p>
-                        <p className="text-lg font-bold text-foreground font-montserrat">12 Months</p>
+                        <p className="text-sm text-muted-foreground mb-1 font-nunito">Deposit Amount</p>
+                        <p className="text-lg font-bold text-foreground font-montserrat">
+                          KES {currentLease.deposit.toLocaleString()}
+                        </p>
                       </div>
                       <div>
-                        <p className="text-sm text-muted-foreground mb-1 font-nunito">Lease Ends</p>
-                        <p className="text-lg font-bold text-foreground font-montserrat">{currentLease.leaseEnd}</p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-muted-foreground mb-1 font-nunito">Next Payment</p>
-                        <p className="text-lg font-bold text-orange-600 font-montserrat">
-                          {daysUntilPayment ?? "--"} days
+                        <p className="text-sm text-muted-foreground mb-1 font-nunito">Payment Status</p>
+                        <p className={`text-lg font-bold font-montserrat ${paymentStatusColor}`}>
+                          {paymentStatusLabel}
                         </p>
                       </div>
                     </div>
@@ -322,13 +336,6 @@ export default function TenantDashboard() {
                               {currentLease.nextPaymentDue}
                             </p>
                           </div>
-                          <Button
-                            size="sm"
-                            className="tyrent-gradient text-white font-nunito shrink-0"
-                            onClick={() => openPay()}
-                          >
-                            Pay Now
-                          </Button>
                         </div>
                       </div>
                     )}
@@ -352,30 +359,23 @@ export default function TenantDashboard() {
                               <Phone className="h-3 w-3" />
                               {currentLease.landlord.phone}
                             </div>
-                            <div className="flex items-center gap-2">
-                              <Mail className="h-3 w-3" />
-                              {currentLease.landlord.email}
-                            </div>
                           </div>
                         </div>
-                        <div className="flex gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="font-nunito bg-transparent"
-                            onClick={() => {
-                              setMessageSubject(`Regarding Unit ${currentLease.unit}`)
-                              setMessageBody("")
-                              setMessageOpen(true)
-                            }}
+                        <Button
+                          asChild
+                          variant="outline"
+                          size="sm"
+                          className="font-nunito bg-transparent"
+                        >
+                          <a
+                            href={`https://wa.me/${currentLease.landlord.phone.replace(/\D/g, "")}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
                           >
-                          <MessageSquare className="h-4 w-4 mr-1" />
-                          Message
-                          </Button>
-                          <Button asChild variant="outline" size="sm" className="font-nunito bg-transparent">
-                            <a href={`mailto:${currentLease.landlord.email}`}>Email</a>
-                          </Button>
-                        </div>
+                            <MessageCircle className="h-4 w-4 mr-1" />
+                            WhatsApp
+                          </a>
+                        </Button>
                       </div>
                     </div>
                   </div>
@@ -408,21 +408,17 @@ export default function TenantDashboard() {
                 <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
                   <Card className="tyrent-card-hover">
                     <CardContent className="p-6">
-                      <div className="w-12 h-12 rounded-lg tyrent-gradient flex items-center justify-center mb-4">
-                        <DollarSign className="h-6 w-6 text-white" />
+                      <div className="w-12 h-12 rounded-lg bg-green-500 flex items-center justify-center mb-4">
+                        <CheckCircle2 className="h-6 w-6 text-white" />
                       </div>
-                      <p className="text-sm text-muted-foreground mb-1 font-nunito">
-                        {backendTenant?.stats ? "Active Bookings" : "Total Paid"}
-                      </p>
+                      <p className="text-sm text-muted-foreground mb-1 font-nunito">Total Bookings</p>
                       <p className="text-3xl font-bold text-foreground font-montserrat">
-                        {backendTenant?.stats?.active_bookings ?? (totalPaid / 1000).toFixed(0)}
+                        {((backendTenant?.stats?.active_bookings ?? 0) + (backendTenant?.stats?.past_bookings ?? 0))}
                       </p>
                       <p className="text-xs text-muted-foreground mt-2 font-nunito">
-                        {backendTenant?.stats
-                          ? (backendTenant.stats.active_bookings ?? 0) > 0
-                            ? "active bookings"
-                            : "No active bookings yet"
-                          : `${paymentHistory.length} payments recorded`}
+                        {((backendTenant?.stats?.active_bookings ?? 0) + (backendTenant?.stats?.past_bookings ?? 0)) > 0
+                          ? `${backendTenant?.stats?.active_bookings ?? 0} active, ${backendTenant?.stats?.past_bookings ?? 0} past`
+                          : "No bookings made"}
                       </p>
                     </CardContent>
                   </Card>
@@ -431,21 +427,15 @@ export default function TenantDashboard() {
                 <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
                   <Card className="tyrent-card-hover">
                     <CardContent className="p-6">
-                      <div className="w-12 h-12 rounded-lg bg-green-500 flex items-center justify-center mb-4">
-                        <CheckCircle2 className="h-6 w-6 text-white" />
+                      <div className="w-12 h-12 rounded-lg tyrent-gradient flex items-center justify-center mb-4">
+                        <DollarSign className="h-6 w-6 text-white" />
                       </div>
-                      <p className="text-sm text-muted-foreground mb-1 font-nunito">
-                        {backendTenant?.stats ? "Pending Bookings" : "Payment Status"}
-                      </p>
-                      <p className={`text-3xl font-bold font-montserrat ${backendTenant?.stats ? "text-foreground" : paymentStatusColor}`}>
-                        {backendTenant?.stats?.pending_bookings ?? paymentStatusLabel}
+                      <p className="text-sm text-muted-foreground mb-1 font-nunito">Total Paid</p>
+                      <p className="text-3xl font-bold text-foreground font-montserrat">
+                        KES {(totalPaid / 1000).toFixed(0)}K
                       </p>
                       <p className="text-xs text-muted-foreground mt-2 font-nunito">
-                        {backendTenant?.stats
-                          ? (backendTenant.stats.pending_bookings ?? 0) > 0
-                            ? `pending bookings: ${backendTenant.stats.pending_bookings ?? 0}`
-                            : "No pending bookings"
-                          : `Next due: ${currentLease?.nextPaymentDue ?? "--"}`}
+                        {paymentHistory.length} payments recorded
                       </p>
                     </CardContent>
                   </Card>
@@ -479,8 +469,8 @@ export default function TenantDashboard() {
               <Card>
                 <CardContent className="p-6">
                   <h3 className="text-xl font-bold text-foreground mb-4 font-montserrat">Quick Actions</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                    <Button
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* <Button
                       variant="outline"
                       className="h-auto py-4 flex-col gap-2 font-nunito bg-transparent"
                       onClick={() => openPay()}
@@ -503,19 +493,18 @@ export default function TenantDashboard() {
                     >
                       <Wrench className="h-6 w-6 text-primary" />
                       <span>Request Maintenance</span>
-                    </Button>
+                    </Button> */}
                     <Button
                       variant="outline"
                       className="h-auto py-4 flex-col gap-2 font-nunito bg-transparent"
                       onClick={() => {
                         if (!currentLease) return
-                        setMessageSubject(`Regarding Unit ${currentLease.unit}`)
                         setMessageBody("")
                         setMessageOpen(true)
                       }}
                       disabled={!currentLease}
                     >
-                      <MessageSquare className="h-6 w-6 text-primary" />
+                      <MessageCircle className="h-6 w-6 text-primary" />
                       <span>Message Landlord</span>
                     </Button>
                     <Button
@@ -612,27 +601,11 @@ export default function TenantDashboard() {
 
             {/* Maintenance Tab */}
             <TabsContent value="maintenance" className="space-y-6">
-              <div className="flex justify-between items-center mb-6">
-                <div>
-                  <h3 className="text-xl font-bold text-foreground font-montserrat">Maintenance Requests</h3>
-                  <p className="text-sm text-muted-foreground font-nunito">
-                    Track and manage your maintenance requests
-                  </p>
-                </div>
-                <Button
-                  className="tyrent-gradient text-white font-nunito"
-                  onClick={() => {
-                    setMaintenanceOpen(true)
-                    setMaintenanceTitle("")
-                    setMaintenanceDescription("")
-                    setMaintenanceCategory("General")
-                    setMaintenancePriority("medium")
-                  }}
-                  disabled={!currentLease}
-                >
-                  <Wrench className="h-4 w-4 mr-2" />
-                  New Request
-                </Button>
+              <div className="mb-6">
+                <h3 className="text-xl font-bold text-foreground font-montserrat">Maintenance Requests</h3>
+                <p className="text-sm text-muted-foreground font-nunito">
+                  Track and manage your maintenance requests
+                </p>
               </div>
 
               <div className="space-y-4">
@@ -765,176 +738,7 @@ export default function TenantDashboard() {
             </TabsContent>
           </Tabs>
 
-          {/* Pay Rent Modal */}
-          {payOpen && currentLease && (
-            <>
-              <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40" onClick={() => setPayOpen(false)} />
-              <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-                <Card className="w-full max-w-lg">
-                  <CardContent className="p-6">
-                    <div className="flex items-start justify-between gap-4 mb-4">
-                      <div>
-                        <h3 className="text-xl font-bold text-foreground font-montserrat">Pay Rent</h3>
-                        <p className="text-sm text-muted-foreground font-nunito">
-                          {currentLease.property} • Unit {currentLease.unit}
-                        </p>
-                      </div>
-                      <Button variant="ghost" size="sm" className="font-nunito" onClick={() => setPayOpen(false)}>
-                        Close
-                      </Button>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-semibold text-foreground mb-2 font-montserrat">
-                          Amount (KES)
-                        </label>
-                        <input
-                          type="number"
-                          min="0"
-                          value={payAmount}
-                          onChange={(e) => setPayAmount(Number.parseInt(e.target.value || "0"))}
-                          className="w-full px-4 py-3 border border-input rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-ring font-nunito"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-semibold text-foreground mb-2 font-montserrat">Method</label>
-                        <select
-                          value={payMethod}
-                          onChange={(e) => setPayMethod(e.target.value as "M-Pesa" | "Card" | "Bank")}
-                          className="w-full px-4 py-3 border border-input rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-ring font-nunito"
-                        >
-                          <option value="M-Pesa">M-Pesa</option>
-                          <option value="Card">Card</option>
-                          <option value="Bank">Bank</option>
-                        </select>
-                      </div>
-                      <div className="md:col-span-2">
-                        <label className="block text-sm font-semibold text-foreground mb-2 font-montserrat">
-                          Note (optional)
-                        </label>
-                        <textarea
-                          value={payNote}
-                          onChange={(e) => setPayNote(e.target.value)}
-                          rows={3}
-                          className="w-full px-4 py-3 border border-input rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-ring font-nunito resize-none"
-                          placeholder="e.g., Paying early this month"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="mt-6 flex items-center justify-between gap-2">
-                      <Button variant="outline" className="bg-transparent font-nunito" onClick={() => setPayOpen(false)}>
-                        Cancel
-                      </Button>
-                      <Button className="tyrent-gradient text-white font-nunito" onClick={submitPayment}>
-                        <CreditCard className="h-4 w-4 mr-2" />
-                        Confirm Payment
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-            </>
-          )}
-
-          {/* New Maintenance Modal */}
-          {maintenanceOpen && currentLease && (
-            <>
-              <div
-                className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40"
-                onClick={() => setMaintenanceOpen(false)}
-              />
-              <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-                <Card className="w-full max-w-lg">
-                  <CardContent className="p-6">
-                    <div className="flex items-start justify-between gap-4 mb-4">
-                      <div>
-                        <h3 className="text-xl font-bold text-foreground font-montserrat">New Maintenance Request</h3>
-                        <p className="text-sm text-muted-foreground font-nunito">
-                          {currentLease.property} • Unit {currentLease.unit}
-                        </p>
-                      </div>
-                      <Button variant="ghost" size="sm" className="font-nunito" onClick={() => setMaintenanceOpen(false)}>
-                        Close
-                      </Button>
-                    </div>
-
-                    <div className="space-y-4">
-                      <div>
-                        <label className="block text-sm font-semibold text-foreground mb-2 font-montserrat">Title</label>
-                        <input
-                          type="text"
-                          value={maintenanceTitle}
-                          onChange={(e) => setMaintenanceTitle(e.target.value)}
-                          placeholder="e.g., Leaking faucet"
-                          className="w-full px-4 py-3 border border-input rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-ring font-nunito"
-                        />
-                      </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-sm font-semibold text-foreground mb-2 font-montserrat">
-                            Category
-                          </label>
-                          <input
-                            type="text"
-                            value={maintenanceCategory}
-                            onChange={(e) => setMaintenanceCategory(e.target.value)}
-                            placeholder="e.g., Plumbing"
-                            className="w-full px-4 py-3 border border-input rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-ring font-nunito"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-semibold text-foreground mb-2 font-montserrat">
-                            Priority
-                          </label>
-                          <select
-                            value={maintenancePriority}
-                            onChange={(e) => setMaintenancePriority(e.target.value as MaintenancePriority)}
-                            className="w-full px-4 py-3 border border-input rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-ring font-nunito"
-                          >
-                            <option value="low">Low</option>
-                            <option value="medium">Medium</option>
-                            <option value="high">High</option>
-                          </select>
-                        </div>
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-semibold text-foreground mb-2 font-montserrat">
-                          Description
-                        </label>
-                        <textarea
-                          value={maintenanceDescription}
-                          onChange={(e) => setMaintenanceDescription(e.target.value)}
-                          rows={4}
-                          placeholder="Describe the issue, when it started, and any extra details."
-                          className="w-full px-4 py-3 border border-input rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-ring font-nunito resize-none"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="mt-6 flex items-center justify-between gap-2">
-                      <Button
-                        variant="outline"
-                        className="bg-transparent font-nunito"
-                        onClick={() => setMaintenanceOpen(false)}
-                      >
-                        Cancel
-                      </Button>
-                      <Button className="tyrent-gradient text-white font-nunito" onClick={submitMaintenance}>
-                        <Wrench className="h-4 w-4 mr-2" />
-                        Submit Request
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-            </>
-          )}
-
-          {/* Message Landlord Modal */}
+          {/* Message Landlord Modal - WhatsApp */}
           {messageOpen && currentLease && (
             <>
               <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40" onClick={() => setMessageOpen(false)} />
@@ -945,7 +749,7 @@ export default function TenantDashboard() {
                       <div>
                         <h3 className="text-xl font-bold text-foreground font-montserrat">Message Landlord</h3>
                         <p className="text-sm text-muted-foreground font-nunito">
-                          To {currentLease.landlord.name} • {currentLease.landlord.email}
+                          To {currentLease.landlord.name} via WhatsApp
                         </p>
                       </div>
                       <Button variant="ghost" size="sm" className="font-nunito" onClick={() => setMessageOpen(false)}>
@@ -954,15 +758,6 @@ export default function TenantDashboard() {
                     </div>
 
                     <div className="space-y-4">
-                      <div>
-                        <label className="block text-sm font-semibold text-foreground mb-2 font-montserrat">Subject</label>
-                        <input
-                          type="text"
-                          value={messageSubject}
-                          onChange={(e) => setMessageSubject(e.target.value)}
-                          className="w-full px-4 py-3 border border-input rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-ring font-nunito"
-                        />
-                      </div>
                       <div>
                         <label className="block text-sm font-semibold text-foreground mb-2 font-montserrat">Message</label>
                         <textarea
@@ -979,21 +774,19 @@ export default function TenantDashboard() {
                       <Button variant="outline" className="bg-transparent font-nunito" onClick={() => setMessageOpen(false)}>
                         Cancel
                       </Button>
-                      <div className="flex gap-2">
-                        <Button asChild variant="outline" className="bg-transparent font-nunito">
-                          <a
-                            href={`mailto:${currentLease.landlord.email}?subject=${encodeURIComponent(
-                              messageSubject || "Tenant Message",
-                            )}&body=${encodeURIComponent(messageBody)}`}
-                          >
-                            Open Email
-                          </a>
-                        </Button>
-                        <Button className="tyrent-gradient text-white font-nunito" onClick={submitMessage}>
-                          <MessageSquare className="h-4 w-4 mr-2" />
-                          Save Message
-                        </Button>
-                      </div>
+                      <Button
+                        asChild
+                        className="tyrent-gradient text-white font-nunito"
+                      >
+                        <a
+                          href={`https://wa.me/${currentLease.landlord.phone.replace(/\D/g, "")}?text=${encodeURIComponent(messageBody || "Hi, I would like to contact you regarding my lease.")}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          <MessageCircle className="h-4 w-4 mr-2" />
+                          Send via WhatsApp
+                        </a>
+                      </Button>
                     </div>
                   </CardContent>
                 </Card>

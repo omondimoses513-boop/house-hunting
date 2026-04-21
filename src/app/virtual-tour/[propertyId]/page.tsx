@@ -1,12 +1,13 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { motion } from "framer-motion"
-import { useParams, useRouter } from "next/navigation"
+import { useParams, useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { sampleProperties } from "@/data/SampleProperties"
+import { ApiError } from "@/lib/api/client"
+import { backendGetApartment, type BackendApartment, type BackendUnit } from "@/lib/api/properties"
 import { PageRoutes } from "@/constants/page-routes"
 import {
   ArrowLeft,
@@ -23,16 +24,107 @@ import {
 export default function VirtualTour() {
   const params = useParams()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const propertyId = params?.propertyId as string
+  const unitId = searchParams.get("unit") || ""
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
+  const [apartment, setApartment] = useState<BackendApartment | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
-  const property = sampleProperties.find((p) => p.id === propertyId)
+  const API_BASE = (process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:8000").replace(/\/+$/, "")
+  const absolutizeUrl = (url?: string | null) => {
+    if (!url) return ""
+    return url.startsWith("http://") || url.startsWith("https://") ? url : `${API_BASE}${url.startsWith("/") ? "" : "/"}${url}`
+  }
 
-  if (!property) {
+  const parseBedrooms = (unitType?: string | null) => {
+    const t = String(unitType || "").toLowerCase()
+    if (!t) return null
+    if (t.includes("bedsitter") || t.includes("studio")) return 0
+    const m = t.match(/(\d+)/)
+    if (m) return Number(m[1])
+    return null
+  }
+
+  useEffect(() => {
+    let cancelled = false
+    const load = async () => {
+      setLoading(true)
+      setLoadError(null)
+      try {
+        const apt = await backendGetApartment(propertyId)
+        if (!cancelled) setApartment(apt)
+      } catch (err) {
+        const msg =
+          err instanceof ApiError && err.status === 404
+            ? "Property not found."
+            : err instanceof Error
+              ? err.message
+              : "Failed to load virtual tour."
+        if (!cancelled) {
+          setLoadError(msg)
+          setApartment(null)
+        }
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    if (propertyId) void load()
+    return () => {
+      cancelled = true
+    }
+  }, [propertyId])
+
+  const tourData = useMemo(() => {
+    if (!apartment) return null
+    const allUnits = apartment.units ?? []
+    const selectedUnit = allUnits.find((u) => String(u.id) === unitId) ?? allUnits[0] ?? null
+    const exterior = absolutizeUrl(apartment.exterior_image_url || apartment.exterior_image) || "/placeholder.svg"
+    const interior = Array.isArray((selectedUnit as any)?.interior_images)
+      ? ((selectedUnit as any).interior_images as string[]).map((img) => absolutizeUrl(img)).filter(Boolean)
+      : []
+    const unitExterior = Array.isArray((selectedUnit as any)?.exterior_images)
+      ? ((selectedUnit as any).exterior_images as string[]).map((img) => absolutizeUrl(img)).filter(Boolean)
+      : []
+    const images = Array.from(new Set([exterior, ...interior, ...unitExterior])).filter(Boolean)
+    const price = Number((selectedUnit as any)?.price_per_month ?? 0)
+    const size = Number((selectedUnit as any)?.size_sqft ?? 0)
+    const bedrooms = parseBedrooms((selectedUnit as any)?.type)
+    return {
+      id: apartment.id,
+      title: apartment.name,
+      location: apartment.address || "No address provided",
+      description: apartment.overview_description || "",
+      amenities: (apartment.amenities ?? []).map((a) => a.name).filter(Boolean),
+      verified: String(apartment.verification_status || "").toUpperCase() === "VERIFIED",
+      images: images.length ? images : ["/placeholder.svg"],
+      unit: selectedUnit,
+      bedrooms,
+      bathrooms: 1,
+      size,
+      price,
+    }
+  }, [apartment, unitId])
+
+  useEffect(() => {
+    setCurrentImageIndex(0)
+  }, [unitId, apartment?.id])
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background pt-24 flex items-center justify-center">
+        <p className="text-sm text-muted-foreground font-nunito">Loading virtual tour...</p>
+      </div>
+    )
+  }
+
+  if (!tourData) {
     return (
       <div className="min-h-screen bg-background pt-24 flex items-center justify-center">
         <div className="text-center">
           <h1 className="text-2xl font-bold mb-2 font-montserrat">Property Not Found</h1>
+          {loadError && <p className="text-sm text-muted-foreground font-nunito">{loadError}</p>}
           <Button onClick={() => router.back()} className="mt-4">
             Back
           </Button>
@@ -42,11 +134,11 @@ export default function VirtualTour() {
   }
 
   const nextImage = () => {
-    setCurrentImageIndex((prev) => (prev + 1) % property.images.length)
+    setCurrentImageIndex((prev) => (prev + 1) % tourData.images.length)
   }
 
   const prevImage = () => {
-    setCurrentImageIndex((prev) => (prev - 1 + property.images.length) % property.images.length)
+    setCurrentImageIndex((prev) => (prev - 1 + tourData.images.length) % tourData.images.length)
   }
 
   return (
@@ -73,8 +165,8 @@ export default function VirtualTour() {
                     <div className="relative w-full aspect-video bg-black flex items-center justify-center overflow-hidden">
                       <motion.img
                         key={currentImageIndex}
-                        src={property.images[currentImageIndex]}
-                        alt={`${property.title} - View ${currentImageIndex + 1}`}
+                        src={tourData.images[currentImageIndex]}
+                        alt={`${tourData.title} - View ${currentImageIndex + 1}`}
                         className="w-full h-full object-cover"
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
@@ -97,14 +189,14 @@ export default function VirtualTour() {
 
                       {/* Image Counter */}
                       <div className="absolute bottom-4 left-1/2 -translate-x-1/2 px-4 py-2 rounded-full bg-black/50 backdrop-blur-sm text-white text-sm font-nunito">
-                        {currentImageIndex + 1} / {property.images.length}
+                        {currentImageIndex + 1} / {tourData.images.length}
                       </div>
                     </div>
 
                     {/* Thumbnail Strip */}
                     <div className="bg-black p-4 overflow-x-auto">
                       <div className="flex gap-2">
-                        {property.images.map((image, index) => (
+                        {tourData.images.map((image, index) => (
                           <motion.button
                             key={index}
                             onClick={() => setCurrentImageIndex(index)}
@@ -131,11 +223,11 @@ export default function VirtualTour() {
                     <h2 className="text-xl font-bold text-foreground mb-4 font-montserrat">360° Virtual Tour</h2>
                     <p className="text-muted-foreground font-nunito mb-4">
                       Explore this property from every angle. Use the arrows to navigate through{" "}
-                      {property.images.length} high-quality images showcasing the apartment's interior and exterior.
+                      {tourData.images.length} high-quality images showcasing the apartment's interior and exterior.
                     </p>
                     <div className="flex gap-2">
                       <Badge variant="outline" className="font-nunito">
-                        {property.images.length} Photos
+                        {tourData.images.length} Photos
                       </Badge>
                       <Badge variant="outline" className="font-nunito">
                         High Resolution
@@ -161,11 +253,11 @@ export default function VirtualTour() {
                 <Card className="shadow-lg">
                   <CardContent className="p-6">
                     <h3 className="font-bold text-lg text-foreground mb-2 font-montserrat line-clamp-2">
-                      {property.title}
+                      {tourData.title}
                     </h3>
                     <div className="flex items-center gap-2 text-sm text-muted-foreground mb-4 font-nunito">
                       <MapPin className="h-4 w-4" />
-                      {property.location}
+                      {tourData.location}
                     </div>
 
                     {/* Property Details */}
@@ -173,21 +265,25 @@ export default function VirtualTour() {
                       <div className="flex items-center gap-3 text-sm">
                         <BedDouble className="h-5 w-5 text-primary" />
                         <span className="text-foreground font-nunito">
-                          {property.bedrooms === 0 ? "Studio" : `${property.bedrooms} Bedrooms`}
+                          {tourData.bedrooms === 0
+                            ? "Bedsitter"
+                            : typeof tourData.bedrooms === "number"
+                              ? `${tourData.bedrooms} Bedrooms`
+                              : "Unit"}
                         </span>
                       </div>
                       <div className="flex items-center gap-3 text-sm">
                         <Bath className="h-5 w-5 text-primary" />
-                        <span className="text-foreground font-nunito">{property.bathrooms} Bathrooms</span>
+                        <span className="text-foreground font-nunito">{tourData.bathrooms} Bathrooms</span>
                       </div>
                       <div className="flex items-center gap-3 text-sm">
                         <Maximize className="h-5 w-5 text-primary" />
-                        <span className="text-foreground font-nunito">{property.size} sqft</span>
+                        <span className="text-foreground font-nunito">{tourData.size || "--"} sqft</span>
                       </div>
                     </div>
 
                     {/* Verified Badge */}
-                    {property.verified && (
+                    {tourData.verified && (
                       <Badge className="w-full justify-center bg-green-500 text-white border-0 mb-4 font-nunito">
                         <CheckCircle2 className="h-3 w-3 mr-1" />
                         Verified Property
@@ -198,7 +294,7 @@ export default function VirtualTour() {
                     <div className="mb-4 p-3 bg-muted rounded-lg">
                       <p className="text-xs text-muted-foreground font-nunito mb-1">Monthly Rent</p>
                       <p className="text-2xl font-bold text-foreground font-montserrat">
-                        KES {property.price.toLocaleString()}
+                        {tourData.price ? `KES ${tourData.price.toLocaleString()}` : "KES --"}
                       </p>
                     </div>
 
@@ -212,7 +308,9 @@ export default function VirtualTour() {
                     {/* Action Buttons */}
                     <div className="space-y-2">
                       <Button
-                        onClick={() => router.push(PageRoutes.BOOKING(property.id))}
+                        onClick={() =>
+                          router.push(`${PageRoutes.BOOKING(tourData.id)}${tourData.unit?.id ? `?unit=${encodeURIComponent(String(tourData.unit.id))}` : ""}`)
+                        }
                         className="w-full tyrent-gradient text-white font-nunito"
                       >
                         <Calendar className="h-4 w-4 mr-2" />
@@ -220,7 +318,7 @@ export default function VirtualTour() {
                       </Button>
                       <Button
                         variant="outline"
-                        onClick={() => router.push(`/properties/${property.slug}`)}
+                        onClick={() => router.push(`/properties/${tourData.id}`)}
                         className="w-full font-nunito"
                       >
                         View Full Details
@@ -234,12 +332,17 @@ export default function VirtualTour() {
                   <CardContent className="p-6">
                     <h4 className="font-semibold text-foreground mb-3 font-montserrat">Amenities</h4>
                     <div className="flex flex-wrap gap-2">
-                      {property.amenities.map((amenity) => (
+                      {tourData.amenities.map((amenity) => (
                         <Badge key={amenity} variant="outline" className="font-nunito">
                           {amenity}
                         </Badge>
                       ))}
                     </div>
+                    {tourData.description && (
+                      <p className="text-sm text-muted-foreground font-nunito mt-4 whitespace-pre-line">
+                        {tourData.description}
+                      </p>
+                    )}
                   </CardContent>
                 </Card>
               </motion.div>

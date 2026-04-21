@@ -7,7 +7,6 @@ import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { sampleProperties } from "@/data/SampleProperties"
 import { PageRoutes } from "@/constants/page-routes"
 import {
   MapPin,
@@ -29,6 +28,8 @@ import {
   Video,
 } from "lucide-react"
 import { getFavorites, setFavorites as persistFavorites, toggleFavorite as toggleFav } from "@/lib/user-preferences"
+import { ApiError } from "@/lib/api/client"
+import { backendListApartments, backendSearchApartments, type BackendApartment, type BackendUnit } from "@/lib/api/properties"
 
 export default function PropertiesListing() {
   const router = useRouter()
@@ -43,6 +44,9 @@ export default function PropertiesListing() {
   const [priceRange, setPriceRange] = useState(100000)
   const [focusedField, setFocusedField] = useState<string | null>(null)
   const observerTarget = useRef(null)
+  const [apartments, setApartments] = useState<BackendApartment[]>([])
+  const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   const areas = [
     "All Areas",
@@ -75,25 +79,87 @@ export default function PropertiesListing() {
     router.push(PageRoutes.BOOKING(propertyId))
   }
 
-  const filteredProperties = sampleProperties.filter((p) => {
-    const matchesArea = selectedArea === "All Areas" || p.area === selectedArea
+  const API_BASE = (process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:8000").replace(/\/+$/, "")
+  const absolutizeUrl = (url?: string | null) => {
+    if (!url) return ""
+    return url.startsWith("http://") || url.startsWith("https://") ? url : `${API_BASE}${url.startsWith("/") ? "" : "/"}${url}`
+  }
+
+  const parseBedrooms = (unitType?: string | null) => {
+    const t = String(unitType || "").toLowerCase()
+    if (!t) return null
+    if (t.includes("bedsitter") || t.includes("studio")) return 0
+    const m = t.match(/(\d+)/)
+    if (m) return Number(m[1])
+    return null
+  }
+
+  const toUnitTypeLabel = (unitType?: string | null) => {
+    const raw = String(unitType || "").trim()
+    if (!raw) return "Unit"
+    const lower = raw.toLowerCase()
+    if (lower === "bedsitter" || lower === "studio") return "Bedsitter"
+    if (/^\d+\s*bed(room)?s?$/i.test(lower)) return raw.replace(/bedroom/i, "Bedroom")
+    if (/^\d+bed(room)?$/i.test(lower)) {
+      const n = lower.match(/\d+/)?.[0] ?? ""
+      return `${n} Bedroom`
+    }
+    return raw
+  }
+
+  const uniqueById = (items: BackendApartment[]) => {
+    const map = new Map<string, BackendApartment>()
+    for (const item of items) {
+      if (!item?.id) continue
+      if (!map.has(item.id)) map.set(item.id, item)
+    }
+    return Array.from(map.values())
+  }
+
+  const cheapestUnit = (units?: BackendUnit[]) => {
+    if (!Array.isArray(units) || units.length === 0) return null
+    let best: BackendUnit | null = null
+    let bestPrice = Number.POSITIVE_INFINITY
+    for (const u of units) {
+      const p = Number((u as any).price_per_month ?? Number.POSITIVE_INFINITY)
+      if (Number.isFinite(p) && p < bestPrice) {
+        bestPrice = p
+        best = u
+      }
+    }
+    return best
+  }
+
+  const filteredApartments = uniqueById(apartments).filter((a) => {
+    const address = (a.address ?? "").toString()
+    const matchesArea = selectedArea === "All Areas" || address.toLowerCase().includes(selectedArea.toLowerCase())
+
+    const unit = cheapestUnit(a.units)
+    const beds = parseBedrooms(unit?.type ?? null)
     const matchesType =
       selectedType === "All Types" ||
-      (selectedType === "Bedsitter" && p.bedrooms === 0) ||
-      (selectedType === "1 Bedroom" && p.bedrooms === 1) ||
-      (selectedType === "2 Bedrooms" && p.bedrooms === 2) ||
-      (selectedType === "3 Bedrooms" && p.bedrooms === 3) ||
-      (selectedType === "4+ Bedrooms" && p.bedrooms >= 4)
-    const matchesPrice = p.price <= priceRange
+      (selectedType === "Bedsitter" && beds === 0) ||
+      (selectedType === "1 Bedroom" && beds === 1) ||
+      (selectedType === "2 Bedrooms" && beds === 2) ||
+      (selectedType === "3 Bedrooms" && beds === 3) ||
+      (selectedType === "4+ Bedrooms" && typeof beds === "number" && beds >= 4)
+
+    const price = Number(unit?.price_per_month ?? 0)
+    const matchesPrice = !price || price <= priceRange
     const matchesBedrooms =
       selectedBedrooms === "Any" ||
-      (selectedBedrooms === "4+" && p.bedrooms >= 4) ||
-      selectedBedrooms === String(p.bedrooms)
-    return matchesArea && matchesType && matchesPrice && matchesBedrooms
+      (selectedBedrooms === "4+" && typeof beds === "number" && beds >= 4) ||
+      (typeof beds === "number" && selectedBedrooms === String(beds))
+
+    const amenityNames = (a.amenities ?? []).map((x) => String(x.name || "").toLowerCase())
+    const matchesAmenities =
+      selectedAmenities.length === 0 || selectedAmenities.every((picked) => amenityNames.includes(picked.toLowerCase()))
+
+    return matchesArea && matchesType && matchesPrice && matchesBedrooms && matchesAmenities
   })
 
-  const displayedProperties = filteredProperties.slice(0, displayCount)
-  const hasMore = displayCount < filteredProperties.length
+  const displayedProperties = filteredApartments.slice(0, displayCount)
+  const hasMore = displayCount < filteredApartments.length
 
   // Infinite scroll
   useEffect(() => {
@@ -129,10 +195,62 @@ export default function PropertiesListing() {
     persistFavorites(favorites)
   }, [favorites])
 
+  useEffect(() => {
+    let cancelled = false
+    const load = async () => {
+      setLoading(true)
+      setLoadError(null)
+      try {
+        const beds =
+          selectedBedrooms === "Any"
+            ? undefined
+            : selectedBedrooms === "4+"
+              ? 4
+              : Number.parseInt(selectedBedrooms)
+
+        const shouldSearch = selectedArea !== "All Areas" || selectedBedrooms !== "Any" || selectedType !== "All Types"
+        const data = shouldSearch
+          ? await backendSearchApartments({
+              location: selectedArea !== "All Areas" ? selectedArea : undefined,
+              max_price: priceRange,
+              beds: typeof beds === "number" && Number.isFinite(beds) ? beds : undefined,
+            })
+          : await backendListApartments()
+
+        if (!cancelled) {
+          setApartments(Array.isArray(data) ? uniqueById(data) : [])
+          setDisplayCount(12)
+        }
+      } catch (err) {
+        const msg =
+          err instanceof ApiError && err.status === 403
+            ? "You need to sign in to view properties."
+            : err instanceof Error
+              ? err.message
+              : "Failed to load properties."
+        if (!cancelled) {
+          setLoadError(msg)
+          setApartments([])
+        }
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    void load()
+    return () => {
+      cancelled = true
+    }
+  }, [selectedArea, selectedBedrooms, selectedType, priceRange])
+
   return (
     <div className="mt-28 bg-background">
       {/* Main Content */}
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 -mt-8 relative z-20 pb-16">
+        {loadError && (
+          <div className="mb-6 rounded-xl border border-border bg-card p-4">
+            <p className="text-sm text-muted-foreground font-nunito">{loadError}</p>
+          </div>
+        )}
         {/* Integrated Search Bar */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mb-6">
           <Card className="shadow-2xl border-0">
@@ -406,7 +524,7 @@ export default function PropertiesListing() {
                     </motion.button>
                     <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
                       <Button className="tyrent-gradient hover:tyrent-gradient-dark text-white px-8 font-montserrat">
-                        Show {filteredProperties.length} properties
+                        Show {filteredApartments.length} properties
                       </Button>
                     </motion.div>
                   </div>
@@ -417,21 +535,35 @@ export default function PropertiesListing() {
         </AnimatePresence>
 
         {/* Properties Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {displayedProperties.map((property, index) => (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+          {displayedProperties.map((property, index) => {
+            const unit = cheapestUnit(property.units)
+            const beds = parseBedrooms(unit?.type ?? null)
+            const price = Number(unit?.price_per_month ?? 0)
+            const size = Number(unit?.size_sqft ?? 0)
+            const image = absolutizeUrl(property.exterior_image_url || property.exterior_image) || "/placeholder.svg"
+            const verified = (property.verification_status ?? "").toString().toUpperCase() === "VERIFIED"
+            const rating = typeof property.average_rating === "number" ? property.average_rating : 0
+            const reviews = typeof property.review_count === "number" ? property.review_count : 0
+            const availableUnitTypes = Array.from(
+              new Set((property.units ?? []).map((u) => toUnitTypeLabel((u as any)?.type)).filter(Boolean)),
+            )
+            const amenityPreview = (property.amenities ?? []).map((a) => a.name).filter(Boolean).slice(0, 3)
+
+            return (
             <motion.div
-              key={property.id}
+              key={`${property.id}-${index}`}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: Math.min(index * 0.05, 0.5) }}
             >
               <Card className="overflow-hidden border-0 shadow-lg hover:shadow-2xl transition-all duration-300 tyrent-card-hover group h-full flex flex-col">
                 <div className="relative">
-                  <Link href={`${PageRoutes.PROPERTIES}/${property.slug}`}>
+                  <Link href={`${PageRoutes.PROPERTIES}/${property.id}`}>
                     <img
-                      src={property.images[0] || "/placeholder.svg"}
-                      alt={property.title}
-                      className="w-full h-64 object-cover cursor-pointer group-hover:scale-105 transition-transform duration-300"
+                      src={image}
+                      alt={property.name}
+                      className="w-full h-44 object-cover cursor-pointer group-hover:scale-105 transition-transform duration-300"
                     />
                   </Link>
                   <motion.button
@@ -449,7 +581,7 @@ export default function PropertiesListing() {
                       }`}
                     />
                   </motion.button>
-                  {property.verified && (
+                  {verified && (
                     <Badge className="absolute top-3 left-3 bg-green-500/90 backdrop-blur-sm text-white border-0 z-10">
                       <CheckCircle2 className="h-3 w-3 mr-1" />
                       Verified
@@ -457,16 +589,16 @@ export default function PropertiesListing() {
                   )}
                 </div>
 
-                <Link href={`${PageRoutes.PROPERTIES}/${property.slug}`}>
+                <Link href={`${PageRoutes.PROPERTIES}/${property.id}`}>
                   <CardContent className="p-4 cursor-pointer flex-1">
                     <div className="flex items-start justify-between mb-2">
                       <div className="flex-1">
                         <h3 className="font-bold text-base text-foreground font-montserrat line-clamp-1 group-hover:text-primary transition-colors">
-                          {property.title}
+                          {property.name}
                         </h3>
                         <div className="flex items-center text-xs text-muted-foreground mt-1 font-nunito">
                           <MapPin className="h-3.5 w-3.5 mr-1" />
-                          {property.location}
+                          {property.address || "No address provided"}
                         </div>
                       </div>
                     </div>
@@ -474,27 +606,59 @@ export default function PropertiesListing() {
                     <div className="flex items-center gap-4 text-xs text-muted-foreground mb-3 font-nunito">
                       <div className="flex items-center">
                         <BedDouble className="h-3.5 w-3.5 mr-1" />
-                        {property.bedrooms === 0 ? "Studio" : `${property.bedrooms} BR`}
+                          {typeof beds === "number" ? (beds === 0 ? "Studio" : `${beds} BR`) : "--"}
                       </div>
                       <div className="flex items-center">
                         <Bath className="h-3.5 w-3.5 mr-1" />
-                        {property.bathrooms} BA
+                        --
                       </div>
                       <div className="flex items-center">
                         <Maximize className="h-3.5 w-3.5 mr-1" />
-                        {property.size} sqft
+                        {size ? `${size} sqft` : "--"}
                       </div>
                     </div>
+
+                    {availableUnitTypes.length > 0 && (
+                      <div className="mb-3">
+                        <p className="text-[11px] text-muted-foreground mb-1 font-nunito">Available unit types</p>
+                        <div className="flex flex-wrap gap-1">
+                          {availableUnitTypes.slice(0, 3).map((t) => (
+                            <Badge key={`${property.id}-${t}`} variant="outline" className="text-[10px] font-nunito">
+                              {t}
+                            </Badge>
+                          ))}
+                          {availableUnitTypes.length > 3 && (
+                            <Badge variant="outline" className="text-[10px] font-nunito">
+                              +{availableUnitTypes.length - 3}
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {amenityPreview.length > 0 && (
+                      <div className="mb-3">
+                        <div className="flex flex-wrap gap-1">
+                          {amenityPreview.map((name) => (
+                            <Badge key={`${property.id}-amenity-${name}`} className="text-[10px] font-nunito" variant="secondary">
+                              {name}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    )}
 
                     <div className="flex items-center justify-between pt-3 border-t border-border">
                       <div className="flex items-center gap-1">
                         <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />
-                        <span className="font-semibold text-sm text-foreground font-nunito">{property.rating}</span>
-                        <span className="text-xs text-muted-foreground font-nunito">({property.reviews})</span>
+                        <span className="font-semibold text-sm text-foreground font-nunito">
+                          {rating ? rating.toFixed(1) : "--"}
+                        </span>
+                        <span className="text-xs text-muted-foreground font-nunito">({reviews})</span>
                       </div>
                       <div className="text-right">
                         <p className="text-lg font-bold text-foreground font-montserrat">
-                          KES {(property.price / 1000).toFixed(0)}K
+                          {price ? `KES ${(price / 1000).toFixed(0)}K` : "KES --"}
                         </p>
                         <p className="text-xs text-muted-foreground font-nunito">per month</p>
                       </div>
@@ -519,11 +683,12 @@ export default function PropertiesListing() {
                 </div>
               </Card>
             </motion.div>
-          ))}
+            )
+          })}
         </div>
 
         {/* Loading Indicator */}
-        {isLoading && (
+        {(isLoading || loading) && (
           <div className="flex justify-center items-center py-12">
             <motion.div className="flex space-x-2" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
               {[0, 1, 2].map((i) => (
@@ -551,13 +716,13 @@ export default function PropertiesListing() {
         {!hasMore && displayedProperties.length > 0 && (
           <motion.div className="text-center py-12" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
             <p className="text-muted-foreground text-base font-nunito">
-              You've viewed all {filteredProperties.length} properties
+              You've viewed all {filteredApartments.length} properties
             </p>
           </motion.div>
         )}
 
         {/* No Results */}
-        {filteredProperties.length === 0 && (
+        {!loading && filteredApartments.length === 0 && (
           <div className="text-center py-16">
             <div className="mb-4">
               <Home className="h-16 w-16 text-muted-foreground mx-auto opacity-50" />

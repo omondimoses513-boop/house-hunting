@@ -7,8 +7,9 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { PageRoutes } from "@/constants/page-routes"
-import { getLandlordPropertyById, type LandlordProperty } from "@/lib/landlord-storage"
 import { ArrowLeft, Edit, MapPin, Home, CheckCircle2 } from "lucide-react"
+import { ApiError } from "@/lib/api/client"
+import { backendGetApartment, backendListUnits, type BackendApartment, type BackendUnit } from "@/lib/api/properties"
 
 function normalizeImage(src: string) {
   if (!src) return "/placeholder.svg"
@@ -20,20 +21,52 @@ export default function LandlordPropertyViewPage() {
   const params = useParams<{ id: string }>()
   const propertyId = params?.id
 
-  const [property, setProperty] = useState<LandlordProperty | null>(null)
+  const [apartment, setApartment] = useState<BackendApartment | null>(null)
+  const [units, setUnits] = useState<BackendUnit[]>([])
+  const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!propertyId) return
-    setProperty(getLandlordPropertyById(propertyId))
+    let cancelled = false
+    const load = async () => {
+      if (!propertyId) return
+      setLoading(true)
+      setLoadError(null)
+      try {
+        const [apt, u] = await Promise.all([backendGetApartment(propertyId), backendListUnits({ apartment: propertyId })])
+        if (cancelled) return
+        setApartment(apt)
+        setUnits(Array.isArray(u) ? u : [])
+      } catch (err) {
+        const msg =
+          err instanceof ApiError && err.status === 404
+            ? "Property not found."
+            : err instanceof Error
+              ? err.message
+              : "Failed to load property."
+        if (!cancelled) {
+          setLoadError(msg)
+          setApartment(null)
+          setUnits([])
+        }
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    void load()
+    return () => {
+      cancelled = true
+    }
   }, [propertyId])
 
   const images = useMemo(() => {
-    if (!property) return []
-    const fromUrls = property.imageUrls ?? []
-    const fromNames = property.imageNames ?? []
-    const merged = [...fromUrls, ...fromNames].map(normalizeImage).filter(Boolean)
+    if (!apartment) return []
+    const API_BASE = (process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:8000").replace(/\/+$/, "")
+    const abs = (url?: string | null) =>
+      !url ? "" : url.startsWith("http://") || url.startsWith("https://") ? url : `${API_BASE}${url.startsWith("/") ? "" : "/"}${url}`
+    const merged = [abs(apartment.exterior_image_url || apartment.exterior_image)].map(normalizeImage).filter(Boolean)
     return Array.from(new Set(merged))
-  }, [property])
+  }, [apartment])
 
   if (!propertyId) {
     return (
@@ -54,7 +87,23 @@ export default function LandlordPropertyViewPage() {
     )
   }
 
-  if (!property) {
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background">
+        <div className="pt-24 pb-16">
+          <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+            <Card>
+              <CardContent className="p-6">
+                <p className="text-sm text-muted-foreground font-nunito">Loading property...</p>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (!apartment) {
     return (
       <div className="min-h-screen bg-background">
         <div className="pt-24 pb-16">
@@ -63,7 +112,7 @@ export default function LandlordPropertyViewPage() {
               <CardContent className="p-6">
                 <p className="text-lg font-semibold text-foreground font-montserrat">Property not found</p>
                 <p className="text-sm text-muted-foreground font-nunito mt-1">
-                  This listing may have been removed or you may need to create it again.
+                  {loadError || "This listing may have been removed or you may need to create it again."}
                 </p>
                 <div className="mt-4 flex gap-2">
                   <Button asChild variant="outline" className="bg-transparent font-nunito">
@@ -84,9 +133,12 @@ export default function LandlordPropertyViewPage() {
     )
   }
 
-  const occupied = property.units.filter((u) => u.status === "occupied").length
-  const vacant = property.units.filter((u) => u.status === "vacant").length
-  const monthlyRevenue = property.units.reduce((sum, u) => sum + (u.status === "occupied" ? u.rent : 0), 0)
+  const occupied = units.filter((u) => String(u.status ?? "").toUpperCase() === "OCCUPIED").length
+  const vacant = units.filter((u) => String(u.status ?? "").toUpperCase() === "VACANT").length
+  const monthlyRevenue = units.reduce((sum, u) => {
+    const price = Number((u as any).price_per_month ?? 0)
+    return sum + (String(u.status ?? "").toUpperCase() === "OCCUPIED" ? price : 0)
+  }, 0)
 
   return (
     <div className="min-h-screen bg-background">
@@ -100,7 +152,7 @@ export default function LandlordPropertyViewPage() {
               </Link>
             </Button>
             <Button asChild className="tyrent-gradient text-white font-nunito">
-              <Link href={`${PageRoutes.LANDLORD_CREATE_PROPERTY}?edit=${property.id}`}>
+              <Link href={`${PageRoutes.LANDLORD_CREATE_PROPERTY}?edit=${apartment.id}`}>
                 <Edit className="h-4 w-4 mr-2" />
                 Edit Listing
               </Link>
@@ -112,7 +164,7 @@ export default function LandlordPropertyViewPage() {
               <div className="relative">
                 <img
                   src={images[0] ?? "/placeholder.svg"}
-                  alt={property.name}
+                  alt={apartment.name}
                   className="w-full h-64 md:h-80 object-cover"
                 />
                 <div className="absolute bottom-4 left-4 right-4">
@@ -120,14 +172,16 @@ export default function LandlordPropertyViewPage() {
                     <div className="flex items-start justify-between gap-4">
                       <div>
                         <h1 className="text-2xl md:text-3xl font-bold text-foreground font-montserrat">
-                          {property.name}
+                          {apartment.name}
                         </h1>
                         <p className="text-sm text-muted-foreground font-nunito flex items-center gap-1 mt-1">
                           <MapPin className="h-4 w-4" />
-                          {property.area}, {property.county} • {property.street}
+                          {apartment.address || "No address provided"}
                         </p>
                       </div>
-                      <Badge className="tyrent-gradient text-white border-0">{property.propertyType}</Badge>
+                      <Badge className="tyrent-gradient text-white border-0">
+                        {(apartment.verification_status ?? "NOT_REQUESTED").toString().toLowerCase()}
+                      </Badge>
                     </div>
                   </div>
                 </div>
@@ -149,32 +203,22 @@ export default function LandlordPropertyViewPage() {
                 <CardContent className="p-6">
                   <h2 className="text-xl font-bold text-foreground font-montserrat mb-2">Description</h2>
                   <p className="text-sm text-muted-foreground font-nunito whitespace-pre-wrap">
-                    {property.description || "No description provided."}
+                    {apartment.overview_description || "No description provided."}
                   </p>
                 </CardContent>
               </Card>
 
-              {(property.amenities.length > 0 || property.customAmenities) && (
+              {(apartment.amenities?.length ?? 0) > 0 && (
                 <Card>
                   <CardContent className="p-6">
                     <h2 className="text-xl font-bold text-foreground font-montserrat mb-4">Amenities</h2>
                     <div className="flex flex-wrap gap-2">
-                      {property.amenities.map((a) => (
-                        <Badge key={a} variant="outline" className="font-nunito">
+                      {(apartment.amenities ?? []).map((a) => (
+                        <Badge key={a.id} variant="outline" className="font-nunito">
                           <CheckCircle2 className="h-3 w-3 mr-1" />
-                          {a}
+                          {a.name}
                         </Badge>
                       ))}
-                      {property.customAmenities
-                        ?.split(",")
-                        .map((s) => s.trim())
-                        .filter(Boolean)
-                        .map((a) => (
-                          <Badge key={a} variant="outline" className="font-nunito">
-                            <CheckCircle2 className="h-3 w-3 mr-1" />
-                            {a}
-                          </Badge>
-                        ))}
                     </div>
                   </CardContent>
                 </Card>
@@ -186,37 +230,43 @@ export default function LandlordPropertyViewPage() {
                     <h2 className="text-xl font-bold text-foreground font-montserrat">Units</h2>
                     <Badge variant="outline" className="font-nunito">
                       <Home className="h-3 w-3 mr-1" />
-                      {property.units.length} total
+                      {units.length} total
                     </Badge>
                   </div>
                   <div className="space-y-3">
-                    {property.units.map((u) => (
+                    {units.map((u) => (
                       <div
-                        key={u.id}
+                        key={String(u.id)}
                         className="flex flex-col md:flex-row md:items-center justify-between gap-3 border border-border rounded-lg p-4"
                       >
                         <div>
-                          <p className="font-semibold text-foreground font-montserrat">Unit {u.unitNumber}</p>
+                          <p className="font-semibold text-foreground font-montserrat">Unit {u.unit_number_or_id}</p>
                           <p className="text-sm text-muted-foreground font-nunito">
-                            {u.bedrooms} BR • {u.bathrooms} BA • {u.size} sqft • KES {u.rent.toLocaleString()}/month
+                            {u.type || "--"} • {u.size_sqft ? `${u.size_sqft} sqft` : "--"} •{" "}
+                            {u.price_per_month ? `KES ${Number(u.price_per_month).toLocaleString()}/month` : "KES --"}
                           </p>
                         </div>
                         <div className="flex items-center gap-2">
                           <Badge variant="outline" className="font-nunito">
-                            {u.type}
+                            {u.category || "RESIDENTIAL"}
                           </Badge>
                           <Badge
                             className={
-                              u.status === "occupied"
+                              String(u.status ?? "").toUpperCase() === "OCCUPIED"
                                 ? "bg-green-500 text-white border-0"
                                 : "bg-orange-500 text-white border-0"
                             }
                           >
-                            {u.status}
+                            {String(u.status ?? "").toLowerCase() || "vacant"}
                           </Badge>
                         </div>
                       </div>
                     ))}
+                    {units.length === 0 && (
+                      <div className="p-4 border border-border rounded-lg text-sm text-muted-foreground font-nunito">
+                        No units added yet.
+                      </div>
+                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -245,11 +295,13 @@ export default function LandlordPropertyViewPage() {
                 </CardContent>
               </Card>
 
-              {property.rules?.trim() && (
+              {apartment.rules_and_policies?.trim() && (
                 <Card>
                   <CardContent className="p-6">
                     <h2 className="text-xl font-bold text-foreground font-montserrat mb-2">Rules</h2>
-                    <p className="text-sm text-muted-foreground font-nunito whitespace-pre-wrap">{property.rules}</p>
+                    <p className="text-sm text-muted-foreground font-nunito whitespace-pre-wrap">
+                      {apartment.rules_and_policies}
+                    </p>
                   </CardContent>
                 </Card>
               )}

@@ -41,6 +41,8 @@ import {
   adminSuspendUser,
   adminVerifyUser,
 } from "@/lib/api/admin"
+import { backendListApartments, backendListUnits } from "@/lib/api/properties"
+import { adminBookingStats, type BookingStats } from "@/lib/api/bookings"
 
 function getDefaultApiBase() {
   return (process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:8000").replace(/\/+$/, "")
@@ -124,6 +126,12 @@ export default function AdminDashboard() {
   const [recentUsers, setRecentUsers] = useState<AdminUser[]>([])
   const [pendingVerifications, setPendingVerifications] = useState<AdminVerification[]>([])
   const [disputes, setDisputes] = useState<AdminDispute[]>([])
+  const [bookingStats, setBookingStats] = useState({
+    totalBookings: 0,
+    pendingBookings: 0,
+    paidBookings: 0,
+    totalAmountPaid: 0,
+  })
 
   const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null)
   const [selectedVerification, setSelectedVerification] = useState<AdminVerification | null>(null)
@@ -144,10 +152,13 @@ export default function AdminDashboard() {
 
     const load = async () => {
       try {
-        const [analytics, users, pending] = await Promise.all([
+        const [analytics, users, pending, apartments, units, bookingStats] = await Promise.all([
           adminDashboardAnalytics(),
           adminListUsers(),
           adminListPendingUsers(),
+          backendListApartments().catch(() => []),
+          backendListUnits().catch(() => []),
+          adminBookingStats(),
         ])
 
         // Map backend analytics to existing dashboard shape.
@@ -155,18 +166,30 @@ export default function AdminDashboard() {
         const totalLandlords = (analytics as any)?.total_landlords ?? 0
         const pendingVerificationsCount = (analytics as any)?.pending_verifications ?? 0
         const totalUsers = totalTenants + totalLandlords
+        const totalProperties = Array.isArray(apartments) ? apartments.length : 0
+        const allUnits = Array.isArray(units) ? units : []
+        const totalUnits = allUnits.length
+        const occupiedUnits = allUnits.filter((u: any) => String(u?.status ?? "").toUpperCase() === "OCCUPIED").length
+        const occupancyRate = totalUnits > 0 ? Math.round((occupiedUnits / totalUnits) * 1000) / 10 : 0
+        const totalRevenue = allUnits.reduce((sum: number, u: any) => {
+          const isOccupied = String(u?.status ?? "").toUpperCase() === "OCCUPIED"
+          const price = Number(u?.price_per_month ?? 0)
+          return sum + (isOccupied && Number.isFinite(price) ? price : 0)
+        }, 0)
 
         setStats({
           totalUsers,
           totalLandlords,
           totalTenants,
-          totalProperties: 0,
-          totalUnits: 0,
-          occupancyRate: 0,
-          totalRevenue: 0,
+          totalProperties,
+          totalUnits,
+          occupancyRate,
+          totalRevenue,
           revenueGrowth: 0,
           // keep pending count indirectly via pendingVerifications array
         })
+
+        setBookingStats(bookingStats)
 
         const mapRole = (role?: string): AdminUser["type"] => {
           const r = (role ?? "").toLowerCase()
@@ -249,21 +272,38 @@ export default function AdminDashboard() {
   }, [pendingVerifications, disputes])
 
   const platformMetrics = useMemo(() => {
-    const bookings = Math.max(1000, Math.round((stats?.totalUsers ?? 1200) * 1.8))
-    const avgBookingValue = 185000
-    const platformFeeRevenue = Math.round(((stats?.totalRevenue ?? 45600000) * 0.26) / 100000) * 100000
+    const avgBookingValue =
+      bookingStats.totalBookings > 0
+        ? Math.round(bookingStats.totalAmountPaid / bookingStats.totalBookings)
+        : 0
+    const totalPaid = bookingStats.totalAmountPaid
     return [
-      { label: "Total Bookings", value: bookings.toLocaleString(), change: "+12.5%", trend: "up" as const },
-      { label: "Avg. Booking Value", value: `KES ${(avgBookingValue / 1000).toFixed(0)}K`, change: "+8.2%", trend: "up" as const },
       {
-        label: "Platform Fee Revenue",
-        value: `KES ${(platformFeeRevenue / 1000000).toFixed(1)}M`,
+        label: "Total Bookings",
+        value: bookingStats.totalBookings.toLocaleString(),
+        change: "+12.5%",
+        trend: "up" as const,
+      },
+      {
+        label: "Pending Bookings",
+        value: bookingStats.pendingBookings.toLocaleString(),
+        change: `${bookingStats.pendingBookings > 0 ? "-" : "+"}5%`,
+        trend: bookingStats.pendingBookings > 0 ? ("down" as const) : ("up" as const),
+      },
+      {
+        label: "Paid Bookings",
+        value: bookingStats.paidBookings.toLocaleString(),
+        change: "+8.2%",
+        trend: "up" as const,
+      },
+      {
+        label: "Total Amount Paid",
+        value: `KES ${(totalPaid / 1000000).toFixed(1)}M`,
         change: "+15.3%",
         trend: "up" as const,
       },
-      { label: "User Satisfaction", value: "4.7/5.0", change: "+0.2", trend: "up" as const },
     ]
-  }, [stats])
+  }, [bookingStats])
 
   const refreshLists = async () => {
     const [users, pending] = await Promise.all([adminListUsers(), adminListPendingUsers()])

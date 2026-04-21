@@ -51,7 +51,13 @@ async function readResponseBody(res: Response) {
 function getAuthToken() {
   if (typeof window === "undefined") return null
   try {
-    return localStorage.getItem("token")
+    const direct = localStorage.getItem("token")
+    if (direct && direct.trim()) return direct.trim()
+    const rawSession = localStorage.getItem("tyrent_auth_session_v1")
+    if (!rawSession) return null
+    const parsed = JSON.parse(rawSession) as { token?: unknown }
+    const sessionToken = typeof parsed?.token === "string" ? parsed.token.trim() : ""
+    return sessionToken || null
   } catch {
     return null
   }
@@ -80,7 +86,13 @@ export async function apiRequest<T>(input: {
   }
 
   if (token) {
-    headers.Authorization = headers.Authorization ?? `Token ${token}`
+    const raw = token.trim()
+    const normalized = raw.toLowerCase().startsWith("token ")
+      ? raw
+      : raw.toLowerCase().startsWith("bearer ")
+        ? `Token ${raw.slice(7).trim()}`
+        : `Token ${raw}`
+    headers.Authorization = headers.Authorization ?? normalized
   }
 
   const res = await fetch(url, { method, headers, body })
