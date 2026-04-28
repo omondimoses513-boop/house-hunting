@@ -24,34 +24,119 @@ import {
   ArrowDownRight,
 } from "lucide-react"
 import {
-  getAdminDisputes,
-  getAdminStats,
-  getAdminUsers,
-  getAdminVerifications,
   seedAdminDemoDataIfEmpty,
+  updateAdminDispute,
+  getAdminDisputes,
   type AdminDispute,
   type AdminStats,
   type AdminUser,
   type AdminVerification,
-  updateAdminDispute,
-  updateAdminUser,
-  updateAdminVerification,
 } from "@/lib/admin-storage"
 import { requireAuth } from "@/lib/route-guards"
+import {
+  adminDashboardAnalytics,
+  adminListPendingUsers,
+  adminListUsers,
+  adminRejectUser,
+  adminSuspendUser,
+  adminVerifyUser,
+} from "@/lib/api/admin"
+import { backendListApartments, backendListUnits } from "@/lib/api/properties"
+import { adminBookingStats, type BookingStats } from "@/lib/api/bookings"
+
+function getDefaultApiBase() {
+  return (process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:8000").replace(/\/+$/, "")
+}
+
+function absolutizeApiUrl(url: string, apiBase: string) {
+  if (!url || typeof url !== "string") return url
+  return url.startsWith("http://") || url.startsWith("https://")
+    ? url
+    : `${apiBase}${url.startsWith("/") ? "" : "/"}${url}`
+}
+
+type VerificationMetaEntry = {
+  nationalId?: string
+  phone?: string
+  documents: Array<{ label: string; url: string }>
+}
+
+/** Maps Django user JSON (e.g. list + pending) to modal fields; absolutizes /media/... paths. */
+function buildVerificationMetaFromUser(u: Record<string, unknown>, apiBase: string): VerificationMetaEntry {
+  const abs = (url: string) => absolutizeApiUrl(url, apiBase)
+  const docs: Array<{ label: string; url: string }> = []
+  const pushIf = (key: string, label: string) => {
+    const v = u[key]
+    if (typeof v === "string" && v.trim()) docs.push({ label, url: abs(v) })
+  }
+  pushIf("national_id_image", "National ID Image")
+  pushIf("proof_of_ownership", "Proof of Ownership")
+  pushIf("kra_pin", "KRA PIN")
+  pushIf("profile_picture", "Profile Picture")
+
+  const nid = u.national_id
+  const phone = u.phone_number
+  return {
+    nationalId:
+      typeof nid === "string" && nid
+        ? nid
+        : typeof nid === "number"
+          ? String(nid)
+          : undefined,
+    phone: typeof phone === "string" && phone ? phone : undefined,
+    documents: docs,
+  }
+}
+
+function mergeVerificationMeta(
+  users: unknown[],
+  pending: unknown[],
+  apiBase: string,
+): Record<string, VerificationMetaEntry> {
+  const out: Record<string, VerificationMetaEntry> = {}
+  for (const raw of users ?? []) {
+    if (raw && typeof raw === "object" && "id" in raw) {
+      out[String((raw as { id: unknown }).id)] = buildVerificationMetaFromUser(
+        raw as Record<string, unknown>,
+        apiBase,
+      )
+    }
+  }
+  for (const raw of pending ?? []) {
+    if (raw && typeof raw === "object" && "id" in raw) {
+      out[String((raw as { id: unknown }).id)] = buildVerificationMetaFromUser(
+        raw as Record<string, unknown>,
+        apiBase,
+      )
+    }
+  }
+  return out
+}
 
 export default function AdminDashboard() {
   const router = useRouter()
   const [selectedPeriod, setSelectedPeriod] = useState("month")
   const [banner, setBanner] = useState<{ title: string; message: string } | null>(null)
 
+  const API_BASE = getDefaultApiBase()
+  const absolutizeUrl = (url: string) => absolutizeApiUrl(url, API_BASE)
+  const isLikelyImageUrl = (url: string) => /\.(png|jpe?g|webp|gif|svg)(\?.*)?$/i.test(url)
+
   const [stats, setStats] = useState<AdminStats | null>(null)
   const [recentUsers, setRecentUsers] = useState<AdminUser[]>([])
   const [pendingVerifications, setPendingVerifications] = useState<AdminVerification[]>([])
   const [disputes, setDisputes] = useState<AdminDispute[]>([])
+  const [bookingStats, setBookingStats] = useState({
+    totalBookings: 0,
+    pendingBookings: 0,
+    paidBookings: 0,
+    totalAmountPaid: 0,
+  })
 
   const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null)
   const [selectedVerification, setSelectedVerification] = useState<AdminVerification | null>(null)
   const [selectedDispute, setSelectedDispute] = useState<AdminDispute | null>(null)
+  const [verificationMeta, setVerificationMeta] = useState<Record<string, VerificationMetaEntry>>({})
 
   const [verifyNotes, setVerifyNotes] = useState("")
   const [rejectReason, setRejectReason] = useState("")
@@ -64,10 +149,120 @@ export default function AdminDashboard() {
       return
     }
     seedAdminDemoDataIfEmpty()
-    setStats(getAdminStats())
-    setRecentUsers(getAdminUsers())
-    setPendingVerifications(getAdminVerifications())
-    setDisputes(getAdminDisputes())
+
+    const load = async () => {
+      try {
+        const [analytics, users, pending, apartments, units, bookingStats] = await Promise.all([
+          adminDashboardAnalytics(),
+          adminListUsers(),
+          adminListPendingUsers(),
+          backendListApartments().catch(() => []),
+          backendListUnits().catch(() => []),
+          adminBookingStats(),
+        ])
+
+        // Map backend analytics to existing dashboard shape.
+        const totalTenants = (analytics as any)?.total_tenants ?? 0
+        const totalLandlords = (analytics as any)?.total_landlords ?? 0
+        const pendingVerificationsCount = (analytics as any)?.pending_verifications ?? 0
+        const totalUsers = totalTenants + totalLandlords
+        const totalProperties = Array.isArray(apartments) ? apartments.length : 0
+        const allUnits = Array.isArray(units) ? units : []
+        const totalUnits = allUnits.length
+        const occupiedUnits = allUnits.filter((u: any) => String(u?.status ?? "").toUpperCase() === "OCCUPIED").length
+        const occupancyRate = totalUnits > 0 ? Math.round((occupiedUnits / totalUnits) * 1000) / 10 : 0
+        const totalRevenue = allUnits.reduce((sum: number, u: any) => {
+          const isOccupied = String(u?.status ?? "").toUpperCase() === "OCCUPIED"
+          const price = Number(u?.price_per_month ?? 0)
+          return sum + (isOccupied && Number.isFinite(price) ? price : 0)
+        }, 0)
+
+        setStats({
+          totalUsers,
+          totalLandlords,
+          totalTenants,
+          totalProperties,
+          totalUnits,
+          occupancyRate,
+          totalRevenue,
+          revenueGrowth: 0,
+          // keep pending count indirectly via pendingVerifications array
+        })
+
+        setBookingStats(bookingStats)
+
+        const mapRole = (role?: string): AdminUser["type"] => {
+          const r = (role ?? "").toLowerCase()
+          if (r.includes("landlord")) return "landlord"
+          return "tenant"
+        }
+
+        const toAdminUser = (u: any): AdminUser => {
+          const verificationStatus = (u.verification_status ?? "").toString().toLowerCase()
+          const status = (u.status ?? "").toString().toLowerCase()
+          const created = (u.created_at ?? u.createdAt ?? new Date().toISOString()).toString()
+          const verified =
+            verificationStatus === "verified" || verificationStatus === "approved" || Boolean(u.verified)
+
+          let mappedStatus: AdminUser["status"] = "active"
+          if (status === "suspended") mappedStatus = "suspended"
+          else if (verificationStatus === "pending" || verificationStatus === "under-review") mappedStatus = "pending"
+          else if (status === "pending") mappedStatus = "pending"
+
+          return {
+            id: String(u.id),
+            name: (u.full_name ?? u.fullName ?? u.username ?? u.email ?? "User").toString(),
+            email: (u.email ?? "").toString(),
+            type: mapRole(u.role),
+            status: mappedStatus,
+            joinedDate: created,
+            verified,
+          }
+        }
+
+        setVerificationMeta(mergeVerificationMeta(users ?? [], pending ?? [], API_BASE))
+
+        const mappedUsers = (users ?? []).map(toAdminUser)
+        setRecentUsers(mappedUsers)
+
+        const toAdminVerification = (u: any): AdminVerification => {
+          const verificationStatus = (u.verification_status ?? "").toString().toLowerCase()
+          const created = (u.created_at ?? u.createdAt ?? new Date().toISOString()).toString()
+
+          let mappedStatus: AdminVerification["status"] = "pending"
+          if (verificationStatus.includes("under")) mappedStatus = "under-review"
+          else if (verificationStatus === "verified" || verificationStatus === "approved") mappedStatus = "approved"
+          else if (verificationStatus === "rejected") mappedStatus = "rejected"
+
+          const docs = Array.isArray(u.documents) ? u.documents.map(String) : []
+
+          return {
+            id: String(u.id),
+            landlord: (u.full_name ?? u.fullName ?? u.username ?? u.email ?? "Landlord").toString(),
+            property: "N/A",
+            submittedDate: created,
+            documents: docs,
+            status: mappedStatus,
+            notes: (u.verification_notes ?? u.notes ?? "").toString() || undefined,
+          }
+        }
+
+        const mappedPending = (pending ?? []).map(toAdminVerification)
+        setPendingVerifications(mappedPending)
+
+        // Keep disputes demo data until backend dispute endpoints are connected.
+        setDisputes(getAdminDisputes())
+        // eslint-disable-next-line no-unused-vars
+        const _ignore = pendingVerificationsCount
+      } catch (err) {
+        setBanner({
+          title: "Failed to load admin data",
+          message: err instanceof Error ? err.message : "Unknown error",
+        })
+      }
+    }
+
+    load()
   }, [])
 
   const derived = useMemo(() => {
@@ -77,49 +272,130 @@ export default function AdminDashboard() {
   }, [pendingVerifications, disputes])
 
   const platformMetrics = useMemo(() => {
-    const bookings = Math.max(1000, Math.round((stats?.totalUsers ?? 1200) * 1.8))
-    const avgBookingValue = 185000
-    const platformFeeRevenue = Math.round(((stats?.totalRevenue ?? 45600000) * 0.26) / 100000) * 100000
+    const avgBookingValue =
+      bookingStats.totalBookings > 0
+        ? Math.round(bookingStats.totalAmountPaid / bookingStats.totalBookings)
+        : 0
+    const totalPaid = bookingStats.totalAmountPaid
     return [
-      { label: "Total Bookings", value: bookings.toLocaleString(), change: "+12.5%", trend: "up" as const },
-      { label: "Avg. Booking Value", value: `KES ${(avgBookingValue / 1000).toFixed(0)}K`, change: "+8.2%", trend: "up" as const },
       {
-        label: "Platform Fee Revenue",
-        value: `KES ${(platformFeeRevenue / 1000000).toFixed(1)}M`,
+        label: "Total Bookings",
+        value: bookingStats.totalBookings.toLocaleString(),
+        change: "+12.5%",
+        trend: "up" as const,
+      },
+      {
+        label: "Pending Bookings",
+        value: bookingStats.pendingBookings.toLocaleString(),
+        change: `${bookingStats.pendingBookings > 0 ? "-" : "+"}5%`,
+        trend: bookingStats.pendingBookings > 0 ? ("down" as const) : ("up" as const),
+      },
+      {
+        label: "Paid Bookings",
+        value: bookingStats.paidBookings.toLocaleString(),
+        change: "+8.2%",
+        trend: "up" as const,
+      },
+      {
+        label: "Total Amount Paid",
+        value: `KES ${(totalPaid / 1000000).toFixed(1)}M`,
         change: "+15.3%",
         trend: "up" as const,
       },
-      { label: "User Satisfaction", value: "4.7/5.0", change: "+0.2", trend: "up" as const },
     ]
-  }, [stats])
+  }, [bookingStats])
 
-  const approveUser = (userId: string) => {
-    setRecentUsers(updateAdminUser(userId, { status: "active", verified: true }))
-    setBanner({ title: "User approved", message: "The user is now active and verified." })
+  const refreshLists = async () => {
+    const [users, pending] = await Promise.all([adminListUsers(), adminListPendingUsers()])
+
+    const mapRole = (role?: string): AdminUser["type"] => {
+      const r = (role ?? "").toLowerCase()
+      if (r.includes("landlord")) return "landlord"
+      return "tenant"
+    }
+
+    const toAdminUser = (u: any): AdminUser => {
+      const verificationStatus = (u.verification_status ?? "").toString().toLowerCase()
+      const status = (u.status ?? "").toString().toLowerCase()
+      const created = (u.created_at ?? u.createdAt ?? new Date().toISOString()).toString()
+      const verified =
+        verificationStatus === "verified" || verificationStatus === "approved" || Boolean(u.verified)
+
+      let mappedStatus: AdminUser["status"] = "active"
+      if (status === "suspended") mappedStatus = "suspended"
+      else if (verificationStatus === "pending" || verificationStatus === "under-review") mappedStatus = "pending"
+      else if (status === "pending") mappedStatus = "pending"
+
+      return {
+        id: String(u.id),
+        name: (u.full_name ?? u.fullName ?? u.username ?? u.email ?? "User").toString(),
+        email: (u.email ?? "").toString(),
+        type: mapRole(u.role),
+        status: mappedStatus,
+        joinedDate: created,
+        verified,
+      }
+    }
+
+    const toAdminVerification = (u: any): AdminVerification => {
+      const verificationStatus = (u.verification_status ?? "").toString().toLowerCase()
+      const created = (u.created_at ?? u.createdAt ?? new Date().toISOString()).toString()
+
+      let mappedStatus: AdminVerification["status"] = "pending"
+      if (verificationStatus.includes("under")) mappedStatus = "under-review"
+      else if (verificationStatus === "verified" || verificationStatus === "approved") mappedStatus = "approved"
+      else if (verificationStatus === "rejected") mappedStatus = "rejected"
+
+      const docs = Array.isArray(u.documents) ? u.documents.map(String) : []
+
+      return {
+        id: String(u.id),
+        landlord: (u.full_name ?? u.fullName ?? u.username ?? u.email ?? "Landlord").toString(),
+        property: "N/A",
+        submittedDate: created,
+        documents: docs,
+        status: mappedStatus,
+        notes: (u.verification_notes ?? u.notes ?? "").toString() || undefined,
+      }
+    }
+
+    setVerificationMeta(mergeVerificationMeta(users ?? [], pending ?? [], API_BASE))
+    setRecentUsers((users ?? []).map(toAdminUser))
+    setPendingVerifications((pending ?? []).map(toAdminVerification))
   }
 
-  const suspendUser = (userId: string) => {
-    setRecentUsers(updateAdminUser(userId, { status: "suspended" }))
-    setBanner({ title: "User suspended", message: "The user account has been suspended." })
+  const approveUser = async (userId: string) => {
+    await adminVerifyUser(userId)
+    setBanner({ title: "User approved", message: "Verification approved successfully." })
+    await refreshLists()
+  }
+
+  const suspendUser = async (userId: string) => {
+    await adminSuspendUser(userId)
+    setBanner({ title: "User suspended", message: "User suspended successfully." })
+    await refreshLists()
   }
 
   const markVerificationReview = (id: string) => {
-    setPendingVerifications(updateAdminVerification(id, { status: "under-review" }))
-    setBanner({ title: "Marked as under review", message: "Verification is now in review state." })
+    // Backend currently only exposes verify/reject/suspend operations in the snippet.
+    setBanner({ title: "Not supported", message: "Marking under-review isn't wired to backend yet." })
+    void id
   }
 
-  const approveVerification = (id: string) => {
-    setPendingVerifications(updateAdminVerification(id, { status: "approved", notes: verifyNotes.trim() || undefined }))
+  const approveVerification = async (id: string) => {
+    await adminVerifyUser(id, { verification_notes: verifyNotes.trim() || undefined })
     setVerifyNotes("")
     setSelectedVerification(null)
-    setBanner({ title: "Verification approved", message: "The landlord verification has been approved." })
+    setBanner({ title: "Verification approved", message: "Landlord verification has been approved." })
+    await refreshLists()
   }
 
-  const rejectVerification = (id: string) => {
-    setPendingVerifications(updateAdminVerification(id, { status: "rejected", notes: rejectReason.trim() || undefined }))
+  const rejectVerification = async (id: string) => {
+    await adminRejectUser(id, { verification_notes: rejectReason.trim() || undefined })
     setRejectReason("")
     setSelectedVerification(null)
-    setBanner({ title: "Verification rejected", message: "The landlord verification was rejected." })
+    setBanner({ title: "Verification rejected", message: "Landlord verification has been rejected." })
+    await refreshLists()
   }
 
   const investigateDispute = (id: string) => {
@@ -658,6 +934,47 @@ export default function AdminDashboard() {
                       )}
                     </div>
 
+                    {(verificationMeta[selectedUser.id]?.nationalId || verificationMeta[selectedUser.id]?.phone) && (
+                      <div className="mb-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {verificationMeta[selectedUser.id]?.nationalId && (
+                          <div className="rounded-lg border border-border p-3">
+                            <p className="text-xs text-muted-foreground font-nunito">National ID</p>
+                            <p className="text-sm font-medium font-nunito">
+                              {verificationMeta[selectedUser.id]?.nationalId}
+                            </p>
+                          </div>
+                        )}
+                        {verificationMeta[selectedUser.id]?.phone && (
+                          <div className="rounded-lg border border-border p-3">
+                            <p className="text-xs text-muted-foreground font-nunito">Phone Number</p>
+                            <p className="text-sm font-medium font-nunito">
+                              {verificationMeta[selectedUser.id]?.phone}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    <div className="flex flex-wrap gap-2 mb-4">
+                      {(verificationMeta[selectedUser.id]?.documents ?? []).map((doc) => (
+                        <Button
+                          key={`${doc.label}-${doc.url}`}
+                          variant="outline"
+                          size="sm"
+                          className="font-nunito bg-transparent"
+                          asChild
+                        >
+                          <a href={absolutizeUrl(doc.url)} target="_blank" rel="noreferrer">
+                            <FileText className="h-4 w-4 mr-1" />
+                            {doc.label}
+                          </a>
+                        </Button>
+                      ))}
+                      {(verificationMeta[selectedUser.id]?.documents ?? []).length === 0 && (
+                        <p className="text-xs text-muted-foreground font-nunito">No document links available.</p>
+                      )}
+                    </div>
+
                     <p className="text-sm text-muted-foreground font-nunito">Joined: {selectedUser.joinedDate}</p>
 
                     <div className="mt-6 flex items-center justify-end gap-2">
@@ -722,6 +1039,28 @@ export default function AdminDashboard() {
                       <Badge variant="outline">Submitted: {selectedVerification.submittedDate}</Badge>
                     </div>
 
+                    {(verificationMeta[selectedVerification.id]?.nationalId ||
+                      verificationMeta[selectedVerification.id]?.phone) && (
+                      <div className="mb-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {verificationMeta[selectedVerification.id]?.nationalId && (
+                          <div className="rounded-lg border border-border p-3">
+                            <p className="text-xs text-muted-foreground font-nunito">National ID</p>
+                            <p className="text-sm font-medium font-nunito">
+                              {verificationMeta[selectedVerification.id]?.nationalId}
+                            </p>
+                          </div>
+                        )}
+                        {verificationMeta[selectedVerification.id]?.phone && (
+                          <div className="rounded-lg border border-border p-3">
+                            <p className="text-xs text-muted-foreground font-nunito">Phone Number</p>
+                            <p className="text-sm font-medium font-nunito">
+                              {verificationMeta[selectedVerification.id]?.phone}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     <div className="flex flex-wrap gap-2 mb-4">
                       {selectedVerification.documents.map((doc) => (
                         <Badge key={doc} variant="outline" className="font-nunito">
@@ -730,6 +1069,40 @@ export default function AdminDashboard() {
                         </Badge>
                       ))}
                     </div>
+
+                    <div className="flex flex-wrap gap-2 mb-4">
+                      {(verificationMeta[selectedVerification.id]?.documents ?? []).map((doc) => (
+                        <Button key={`${doc.label}-${doc.url}`} variant="outline" size="sm" className="font-nunito bg-transparent" asChild>
+                          <a href={absolutizeUrl(doc.url)} target="_blank" rel="noreferrer">
+                            <FileText className="h-4 w-4 mr-1" />
+                            {doc.label}
+                          </a>
+                        </Button>
+                      ))}
+                      {(verificationMeta[selectedVerification.id]?.documents ?? []).length === 0 && (
+                        <p className="text-xs text-muted-foreground font-nunito">No uploaded document links available yet.</p>
+                      )}
+                    </div>
+
+                    {(verificationMeta[selectedVerification.id]?.documents ?? []).some((d) => isLikelyImageUrl(d.url)) && (
+                      <div className="mb-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {(verificationMeta[selectedVerification.id]?.documents ?? [])
+                          .filter((d) => isLikelyImageUrl(d.url))
+                          .slice(0, 4)
+                          .map((d) => (
+                            <a
+                              key={`preview-${d.label}-${d.url}`}
+                              href={absolutizeUrl(d.url)}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="rounded-lg border border-border overflow-hidden hover:opacity-90 transition-opacity"
+                            >
+                              <img src={absolutizeUrl(d.url)} alt={d.label} className="w-full h-40 object-cover" />
+                              <div className="p-2 text-xs text-muted-foreground font-nunito">{d.label}</div>
+                            </a>
+                          ))}
+                      </div>
+                    )}
 
                     <div className="space-y-2">
                       <label className="block text-sm font-semibold text-foreground font-montserrat">Notes</label>

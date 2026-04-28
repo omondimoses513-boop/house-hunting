@@ -6,7 +6,7 @@ import { createPortal } from "react-dom"
 import { Button } from "@/components/ui/button"
 import { useTheme } from "@/components/theme-provider"
 import { useRouter } from "next/navigation"
-import { getSession, signOut } from "@/lib/auth"
+import { AUTH_CHANGED_EVENT, getSession, signOut } from "@/lib/auth"
 import { dashboardRouteForRole } from "@/lib/route-guards"
 import {
   Menu,
@@ -22,7 +22,9 @@ import {
   Sun,
   Moon,
   LayoutDashboard,
+  CircleUserRound,
 } from "lucide-react"
+import { TyrentLogoMark } from "@/components/TyrentLogo"
 
 export default function Header() {
   const router = useRouter()
@@ -45,7 +47,11 @@ export default function Header() {
     }
     sync()
     window.addEventListener("storage", sync)
-    return () => window.removeEventListener("storage", sync)
+    window.addEventListener(AUTH_CHANGED_EVENT, sync)
+    return () => {
+      window.removeEventListener("storage", sync)
+      window.removeEventListener(AUTH_CHANGED_EVENT, sync)
+    }
   }, [])
 
   useEffect(() => {
@@ -63,6 +69,7 @@ export default function Header() {
 
   const lightAtTop = mounted && theme === "light" && !scrolled
   const dashboardHref = sessionRole ? dashboardRouteForRole(sessionRole as any) : "/auth/login"
+  const showMyBookings = sessionRole !== "landlord" && sessionRole !== "admin"
 
   const mobileMenuOverlay =
     mounted && isMenuOpen
@@ -222,7 +229,7 @@ export default function Header() {
           {/* Logo */}
           <Link href="/" className="flex items-center space-x-2 z-50">
             <div className="tyrent-gradient w-8 h-8 rounded-lg flex items-center justify-center shadow-lg">
-              <Building2 className="h-5 w-5 text-white" />
+              <TyrentLogoMark className="h-5 w-5 text-white" />
             </div>
             <span
               className={`text-xl font-bold transition-colors duration-300 font-montserrat ${
@@ -235,46 +242,23 @@ export default function Header() {
 
           {/* Desktop Navigation */}
           <nav className="hidden md:flex items-center space-x-1">
-            <Link href="/">
-              <Button
-                variant="ghost"
-                className={`text-sm font-medium rounded-full px-4 transition-colors duration-300 font-nunito ${
-                  scrolled || lightAtTop ? "text-foreground hover:bg-accent" : "text-white hover:bg-white/10"
-                }`}
-              >
-                Home
-              </Button>
-            </Link>
-            <Link href="/properties">
-              <Button
-                variant="ghost"
-                className={`text-sm font-medium rounded-full px-4 transition-colors duration-300 font-nunito ${
-                  scrolled || lightAtTop ? "text-foreground hover:bg-accent" : "text-white hover:bg-white/10"
-                }`}
-              >
-                Properties
-              </Button>
-            </Link>
-            <Link href="/landlord/register">
-              <Button
-                variant="ghost"
-                className={`text-sm font-medium rounded-full px-4 transition-colors duration-300 font-nunito ${
-                  scrolled || lightAtTop ? "text-foreground hover:bg-accent" : "text-white hover:bg-white/10"
-                }`}
-              >
-                Become a Landlord
-              </Button>
-            </Link>
-            <Link href="/tenant/dashboard">
-              <Button
-                variant="ghost"
-                className={`text-sm font-medium rounded-full px-4 transition-colors duration-300 font-nunito ${
-                  scrolled || lightAtTop ? "text-foreground hover:bg-accent" : "text-white hover:bg-white/10"
-                }`}
-              >
-                My Bookings
-              </Button>
-            </Link>
+            {[
+              { href: "/", label: "Home" },
+              { href: "/properties", label: "Properties" },
+              { href: "/landlord/register", label: "Become a Landlord" },
+              ...(showMyBookings ? [{ href: "/tenant/dashboard", label: "My Bookings" }] : []),
+            ].map(({ href, label }) => (
+              <Link key={href} href={href}>
+                <Button
+                  variant="ghost"
+                  className={`text-sm font-medium rounded-full px-4 transition-colors duration-300 font-nunito ${
+                    scrolled || lightAtTop ? "text-foreground hover:bg-accent" : "text-white hover:bg-white/10"
+                  }`}
+                >
+                  {label}
+                </Button>
+              </Link>
+            ))}
           </nav>
 
           {/* Right Side Navigation */}
@@ -284,6 +268,18 @@ export default function Header() {
               <>
                 {sessionRole ? (
                   <>
+                    <Button
+                      asChild
+                      variant="outline"
+                      className={`font-nunito bg-transparent ${
+                        scrolled || lightAtTop ? "" : "border-white/30 text-white hover:bg-white/10"
+                      }`}
+                    >
+                      <Link href="/profile">
+                        <CircleUserRound className="h-4 w-4 mr-2" />
+                        Profile
+                      </Link>
+                    </Button>
                     <Button
                       asChild
                       variant="outline"
@@ -363,18 +359,32 @@ export default function Header() {
               <Bell className={`h-5 w-5 ${scrolled || lightAtTop ? "text-muted-foreground" : "text-white"}`} />
             </Button>
 
-            {/* Favorites */}
-            <Link href="/tenant/dashboard">
-              <Button
-                variant="ghost"
-                size="icon"
-                className={`rounded-full transition-colors duration-300 ${
-                  scrolled || lightAtTop ? "hover:bg-accent" : "hover:bg-white/10"
-                }`}
-              >
-                <Heart className={`h-5 w-5 ${scrolled || lightAtTop ? "text-muted-foreground" : "text-white"}`} />
-              </Button>
-            </Link>
+            {/* Favorites / Dashboard Icon */}
+            {sessionRole === "landlord" || sessionRole === "admin" ? (
+              <Link href={dashboardHref}>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className={`rounded-full transition-colors duration-300 ${
+                    scrolled || lightAtTop ? "hover:bg-accent" : "hover:bg-white/10"
+                  }`}
+                >
+                  <LayoutDashboard className={`h-5 w-5 ${scrolled || lightAtTop ? "text-muted-foreground" : "text-white"}`} />
+                </Button>
+              </Link>
+            ) : (
+              <Link href="/tenant/dashboard">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className={`rounded-full transition-colors duration-300 ${
+                    scrolled || lightAtTop ? "hover:bg-accent" : "hover:bg-white/10"
+                  }`}
+                >
+                  <Heart className={`h-5 w-5 ${scrolled || lightAtTop ? "text-muted-foreground" : "text-white"}`} />
+                </Button>
+              </Link>
+            )}
 
             {/* User Menu */}
             <div className={`flex items-center space-x-2 rounded-full p-1 border hover:shadow-md transition-all duration-300 cursor-pointer ${

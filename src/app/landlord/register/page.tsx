@@ -24,6 +24,7 @@ import {
 } from "lucide-react"
 import { PageRoutes } from "@/constants/page-routes"
 import { saveLandlordProfile, type LandlordProfile } from "@/lib/landlord-storage"
+import { backendUploadLandlordDocuments } from "@/lib/api/landlord"
 
 const steps = [
   { id: 1, name: "Personal Info", icon: User },
@@ -79,7 +80,7 @@ export default function LandlordRegister() {
     setFormData({ ...formData, [field]: file })
   }
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     setSubmitError(null)
 
     const missingPersonal =
@@ -117,6 +118,13 @@ export default function LandlordRegister() {
 
     setIsSubmitting(true)
     try {
+      // Upload verification documents to backend (requires an authenticated landlord token).
+      // The backend endpoint expects multipart/form-data.
+      const uploadForm = new FormData()
+      if (formData.idDocument) uploadForm.append("id_document", formData.idDocument)
+      if (formData.proofOfOwnership) uploadForm.append("proof_of_ownership", formData.proofOfOwnership)
+      if (formData.kraPin) uploadForm.append("kra_pin", formData.kraPin)
+
       const profile: LandlordProfile = {
         fullName: formData.fullName.trim(),
         email: formData.email.trim(),
@@ -132,10 +140,16 @@ export default function LandlordRegister() {
         kraPinName: formData.kraPin?.name ?? "",
         createdAt: new Date().toISOString(),
       }
+
       saveLandlordProfile(profile)
+
+      // Upload after saving locally so the user doesn't lose progress
+      // even if the backend temporarily rejects the request.
+      await backendUploadLandlordDocuments(uploadForm)
       router.push(`${PageRoutes.LANDLORD_DASHBOARD}?registered=1`)
     } catch (e) {
       setSubmitError(e instanceof Error ? e.message : "Failed to submit application. Please try again.")
+      setIsSubmitting(false)
     } finally {
       setIsSubmitting(false)
     }
