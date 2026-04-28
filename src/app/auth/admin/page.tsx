@@ -296,18 +296,10 @@ export default function AdminDashboard() {
           {/* Main Content Tabs */}
           <Tabs defaultValue="users" className="space-y-6">
             <TabsList className="bg-muted">
-              <TabsTrigger value="users" className="font-nunito">
-                Users
-              </TabsTrigger>
-              <TabsTrigger value="verifications" className="font-nunito">
-                Verifications
-              </TabsTrigger>
-              <TabsTrigger value="disputes" className="font-nunito">
-                Disputes
-              </TabsTrigger>
-              <TabsTrigger value="analytics" className="font-nunito">
-                Analytics
-              </TabsTrigger>
+              <TabsTrigger value="users" className="font-nunito">Users</TabsTrigger>
+              <TabsTrigger value="verifications" className="font-nunito">Verifications</TabsTrigger>
+              <TabsTrigger value="disputes" className="font-nunito">Disputes</TabsTrigger>
+              <TabsTrigger value="analytics" className="font-nunito">Analytics</TabsTrigger>
             </TabsList>
 
             {/* Users Tab */}
@@ -316,9 +308,7 @@ export default function AdminDashboard() {
                 <CardContent className="p-6">
                   <div className="flex items-center justify-between mb-6">
                     <h3 className="text-xl font-bold text-foreground font-montserrat">Recent Users</h3>
-                    <Button variant="outline" size="sm" className="font-nunito bg-transparent">
-                      View All
-                    </Button>
+                    <Button variant="outline" size="sm" className="font-nunito bg-transparent">View All</Button>
                   </div>
 
                   <div className="space-y-4">
@@ -412,15 +402,9 @@ export default function AdminDashboard() {
                               }
                             >
                               {verification.status === "under-review" ? (
-                                <>
-                                  <Clock className="h-3 w-3 mr-1" />
-                                  Under Review
-                                </>
+                                <><Clock className="h-3 w-3 mr-1" />Under Review</>
                               ) : (
-                                <>
-                                  <Clock className="h-3 w-3 mr-1" />
-                                  Pending
-                                </>
+                                <><Clock className="h-3 w-3 mr-1" />Pending</>
                               )}
                             </Badge>
                           </div>
@@ -665,10 +649,7 @@ export default function AdminDashboard() {
                         <Button
                           variant="outline"
                           className="text-green-600 border-green-600 font-nunito bg-transparent"
-                          onClick={() => {
-                            approveUser(selectedUser.id)
-                            setSelectedUser(null)
-                          }}
+                          onClick={() => { approveUser(selectedUser.id); setSelectedUser(null) }}
                         >
                           Approve
                         </Button>
@@ -676,10 +657,7 @@ export default function AdminDashboard() {
                       <Button
                         variant="outline"
                         className="text-red-600 border-red-600 font-nunito bg-transparent"
-                        onClick={() => {
-                          suspendUser(selectedUser.id)
-                          setSelectedUser(null)
-                        }}
+                        onClick={() => { suspendUser(selectedUser.id); setSelectedUser(null) }}
                       >
                         Suspend
                       </Button>
@@ -707,12 +685,7 @@ export default function AdminDashboard() {
                           {selectedVerification.landlord} • {selectedVerification.property}
                         </p>
                       </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="font-nunito"
-                        onClick={() => setSelectedVerification(null)}
-                      >
+                      <Button variant="ghost" size="sm" className="font-nunito" onClick={() => setSelectedVerification(null)}>
                         Close
                       </Button>
                     </div>
@@ -768,7 +741,10 @@ export default function AdminDashboard() {
                         >
                           Reject
                         </Button>
-                        <Button className="tyrent-gradient text-white font-nunito" onClick={() => approveVerification(selectedVerification.id)}>
+                        <Button
+                          className="tyrent-gradient text-white font-nunito"
+                          onClick={() => approveVerification(selectedVerification.id)}
+                        >
                           Approve
                         </Button>
                       </div>
@@ -821,7 +797,10 @@ export default function AdminDashboard() {
                       <Button variant="outline" className="bg-transparent font-nunito" onClick={() => setSelectedDispute(null)}>
                         Cancel
                       </Button>
-                      <Button className="tyrent-gradient text-white font-nunito" onClick={() => resolveDispute(selectedDispute.id)}>
+                      <Button
+                        className="tyrent-gradient text-white font-nunito"
+                        onClick={() => resolveDispute(selectedDispute.id)}
+                      >
                         <Shield className="h-4 w-4 mr-2" />
                         Mark Resolved
                       </Button>
@@ -835,4 +814,4 @@ export default function AdminDashboard() {
       </div>
     </div>
   )
-} 
+}
