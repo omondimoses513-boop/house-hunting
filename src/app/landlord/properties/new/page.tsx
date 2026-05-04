@@ -577,7 +577,16 @@ export default function NewPropertyListing() {
         }
       }
 
-      router.push(`/landlord/properties/${apartment.id}`)
+      // Redirect to checkout for subscription payment
+      const propertyPayload = {
+        propertyName: formData.propertyName.trim(),
+        address: [formData.street.trim(), formData.area.trim(), formData.county].filter(Boolean).join(", "),
+        description: formData.description.trim(),
+        units: formData.units.length,
+      }
+      router.push(
+        `${PageRoutes.LANDLORD_PROPERTY_CHECKOUT}?property=${encodeURIComponent(JSON.stringify(propertyPayload))}`
+      )
     } catch (e) {
       const msg =
         e instanceof ApiError

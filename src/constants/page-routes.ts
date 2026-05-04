@@ -7,12 +7,15 @@ export const PageRoutes = {
   // Landlord routes
   LANDLORD_DASHBOARD: "/landlord/dashboard",
   LANDLORD_CREATE_PROPERTY: "/landlord/properties/new",
+  LANDLORD_PROPERTY_CHECKOUT: "/landlord/property-checkout",
+  LANDLORD_PROPERTY_CONFIRMATION: "/landlord/property-confirmation",
 
   // Tenant routes
   TENANT_DASHBOARD: "/tenant/dashboard",
 
   // Booking routes
   BOOKING: (propertyId: string) => `/booking/${propertyId}`,
+  BOOKING_CHECKOUT: "/booking/checkout",
   BOOKING_CONFIRMATION: "/booking/confirmation",
 
   // Admin routes

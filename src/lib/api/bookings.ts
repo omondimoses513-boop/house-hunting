@@ -45,6 +45,13 @@ export function backendLandlordBookings() {
   })
 }
 
+export function backendAdminAllBookings() {
+  return apiRequest<BackendBooking[]>({
+    path: "/api/bookings/admin/all/",
+    method: "GET",
+  })
+}
+
 export function backendGetBooking(bookingId: string) {
   return apiRequest<BackendBooking>({
     path: `/api/bookings/${encodeURIComponent(bookingId)}/`,
@@ -89,26 +96,19 @@ export type BookingStats = {
 
 export async function adminBookingStats() {
   try {
-    // Fetch all bookings from both tenant and landlord endpoints
-    const [tenantBookings, landlordBookings] = await Promise.all([
-      backendTenantBookings().catch(() => []),
-      backendLandlordBookings().catch(() => []),
-    ])
-
-    const allBookings = [...(tenantBookings || []), ...(landlordBookings || [])]
+    // Fetch all bookings from the admin endpoint
+    const allBookings = await backendAdminAllBookings()
 
     const stats: BookingStats = {
       totalBookings: allBookings.length,
-      pendingBookings: allBookings.filter(
-        (b) => b.booking_status === "PENDING" || b.payment_status === "UNPAID" || b.payment_status === "PENDING"
+      pendingBookings: allBookings.filter((b) => b.booking_status === "PENDING").length,
+      paidBookings: allBookings.filter(
+        (b) => b.booking_status === "CONFIRMED" || b.booking_status === "PAID" || b.payment_status === "COMPLETED"
       ).length,
-      paidBookings: allBookings.filter((b) => b.payment_status === "COMPLETED").length,
-      totalAmountPaid: allBookings
-        .filter((b) => b.payment_status === "COMPLETED")
-        .reduce((sum, b) => {
-          const amount = typeof b.booking_amount === "string" ? parseFloat(b.booking_amount) : b.booking_amount
-          return sum + (Number.isFinite(amount) ? amount : 0)
-        }, 0),
+      totalAmountPaid: allBookings.reduce((sum, b) => {
+        const amount = typeof b.booking_amount === "string" ? parseFloat(b.booking_amount) : b.booking_amount
+        return sum + (Number.isFinite(amount) ? amount : 0)
+      }, 0),
     }
 
     return stats
@@ -121,4 +121,11 @@ export async function adminBookingStats() {
       totalAmountPaid: 0,
     }
   }
+}
+
+export async function backendConfirmBooking(bookingId: string) {
+  return apiRequest<{ message?: string; success?: string; error?: string }>({
+    path: `/api/bookings/${encodeURIComponent(bookingId)}/confirm/`,
+    method: "PATCH",
+  })
 }

@@ -297,7 +297,7 @@ export default function AdminDashboard() {
         trend: "up" as const,
       },
       {
-        label: "Total Amount Paid",
+        label: "Total Revenue",
         value: `KES ${(totalPaid / 1000000).toFixed(1)}M`,
         change: "+15.3%",
         trend: "up" as const,
