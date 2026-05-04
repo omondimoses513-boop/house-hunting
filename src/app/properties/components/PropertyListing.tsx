@@ -21,10 +21,6 @@ import {
   Home,
   DollarSign,
   X,
-  Wifi,
-  Car,
-  Dumbbell,
-  Shield,
   Video,
 } from "lucide-react"
 import { getFavorites, setFavorites as persistFavorites, toggleFavorite as toggleFav } from "@/lib/user-preferences"
@@ -36,12 +32,12 @@ export default function PropertiesListing() {
   const [favorites, setFavorites] = useState<string[]>([])
   const [selectedArea, setSelectedArea] = useState("All Areas")
   const [selectedType, setSelectedType] = useState("All Types")
-  const [displayCount, setDisplayCount] = useState(12)
+  const [displayCount, setDisplayCount] = useState(6)
   const [isLoading, setIsLoading] = useState(false)
   const [showFilters, setShowFilters] = useState(false)
   const [selectedBedrooms, setSelectedBedrooms] = useState("Any")
   const [selectedAmenities, setSelectedAmenities] = useState<string[]>([])
-  const [priceRange, setPriceRange] = useState(100000)
+  const [priceRange, setPriceRange] = useState(500000)
   const [focusedField, setFocusedField] = useState<string | null>(null)
   const observerTarget = useRef(null)
   const [apartments, setApartments] = useState<BackendApartment[]>([])
@@ -71,9 +67,7 @@ export default function PropertiesListing() {
     toggleFav(id)
   }
 
-  const toggleAmenity = (amenity: string) => {
-    setSelectedAmenities((prev) => (prev.includes(amenity) ? prev.filter((a) => a !== amenity) : [...prev, amenity]))
-  }
+
 
   const handleBooking = (propertyId: string) => {
     router.push(PageRoutes.BOOKING(propertyId))
@@ -151,11 +145,7 @@ export default function PropertiesListing() {
       (selectedBedrooms === "4+" && typeof beds === "number" && beds >= 4) ||
       (typeof beds === "number" && selectedBedrooms === String(beds))
 
-    const amenityNames = (a.amenities ?? []).map((x) => String(x.name || "").toLowerCase())
-    const matchesAmenities =
-      selectedAmenities.length === 0 || selectedAmenities.every((picked) => amenityNames.includes(picked.toLowerCase()))
-
-    return matchesArea && matchesType && matchesPrice && matchesBedrooms && matchesAmenities
+    return matchesArea && matchesType && matchesPrice && matchesBedrooms
   })
 
   const displayedProperties = filteredApartments.slice(0, displayCount)
@@ -168,7 +158,7 @@ export default function PropertiesListing() {
         if (entries[0].isIntersecting && hasMore && !isLoading) {
           setIsLoading(true)
           setTimeout(() => {
-            setDisplayCount((prev) => prev + 12)
+            setDisplayCount((prev) => prev + 6)
             setIsLoading(false)
           }, 800)
         }
@@ -219,7 +209,7 @@ export default function PropertiesListing() {
 
         if (!cancelled) {
           setApartments(Array.isArray(data) ? uniqueById(data) : [])
-          setDisplayCount(12)
+          setDisplayCount(6)
         }
       } catch (err) {
         const msg =
@@ -271,7 +261,7 @@ export default function PropertiesListing() {
                     <select
                       value={selectedArea}
                       onChange={(e) => setSelectedArea(e.target.value)}
-                      className="w-full bg-transparent border-none outline-none text-sm text-foreground font-nunito cursor-pointer"
+                      className="w-full bg-transparent border-none outline-none text-sm text-foreground font-nunito cursor-pointer [&_option]:bg-background [&_option]:text-foreground"
                     >
                       {areas.map((area) => (
                         <option key={area} value={area}>
@@ -306,7 +296,7 @@ export default function PropertiesListing() {
                     <select
                       value={selectedType}
                       onChange={(e) => setSelectedType(e.target.value)}
-                      className="w-full bg-transparent border-none outline-none text-sm text-foreground font-nunito cursor-pointer"
+                      className="w-full bg-transparent border-none outline-none text-sm text-foreground font-nunito cursor-pointer [&_option]:bg-background [&_option]:text-foreground"
                     >
                       {propertyTypes.map((type) => (
                         <option key={type} value={type}>
@@ -377,18 +367,7 @@ export default function PropertiesListing() {
                   <span>{showFilters ? "Hide" : "Show"} filters</span>
                 </motion.button>
 
-                <div className="flex gap-2">
-                  {selectedAmenities.slice(0, 2).map((amenity) => (
-                    <Badge key={amenity} variant="secondary" className="text-xs font-nunito">
-                      {amenity}
-                    </Badge>
-                  ))}
-                  {selectedAmenities.length > 2 && (
-                    <Badge variant="secondary" className="text-xs font-nunito">
-                      +{selectedAmenities.length - 2}
-                    </Badge>
-                  )}
-                </div>
+
               </div>
             </CardContent>
           </Card>
@@ -442,47 +421,6 @@ export default function PropertiesListing() {
                       </div>
                     </div>
 
-                    {/* Amenities */}
-                    <div>
-                      <label className="block text-sm font-semibold text-foreground mb-3 font-montserrat">
-                        Amenities
-                      </label>
-                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-                        {[
-                          { icon: Wifi, label: "WiFi" },
-                          { icon: Car, label: "Parking" },
-                          { icon: Dumbbell, label: "Gym" },
-                          { icon: Shield, label: "Security" },
-                          { icon: Home, label: "Furnished" },
-                        ].map((amenity) => (
-                          <motion.button
-                            key={amenity.label}
-                            onClick={() => toggleAmenity(amenity.label)}
-                            className={`flex flex-col items-center justify-center p-4 rounded-xl border-2 transition-all space-y-2 ${
-                              selectedAmenities.includes(amenity.label)
-                                ? "border-primary bg-primary/10"
-                                : "border-border hover:border-primary/50 hover:bg-muted"
-                            }`}
-                            whileHover={{ scale: 1.05, y: -2 }}
-                            whileTap={{ scale: 0.95 }}
-                          >
-                            <amenity.icon
-                              className={`h-6 w-6 ${
-                                selectedAmenities.includes(amenity.label) ? "text-primary" : "text-muted-foreground"
-                              }`}
-                            />
-                            <span
-                              className={`text-xs font-medium font-nunito ${
-                                selectedAmenities.includes(amenity.label) ? "text-primary" : "text-foreground"
-                              }`}
-                            >
-                              {amenity.label}
-                            </span>
-                          </motion.button>
-                        ))}
-                      </div>
-                    </div>
-
                     {/* Price Range Slider */}
                     <div>
                       <label className="block text-sm font-semibold text-foreground mb-3 font-montserrat">
@@ -517,7 +455,7 @@ export default function PropertiesListing() {
                       onClick={() => {
                         setSelectedBedrooms("Any")
                         setSelectedAmenities([])
-                        setPriceRange(100000)
+                        setPriceRange(500000)
                       }}
                     >
                       Clear all

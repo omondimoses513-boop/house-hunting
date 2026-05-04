@@ -22,6 +22,7 @@ import {
   XCircle,
   ArrowUpRight,
   MapPin,
+  Phone,
 } from "lucide-react"
 import { PageRoutes } from "@/constants/page-routes"
 import {
@@ -38,7 +39,7 @@ import { backendGetMyProfile } from "@/lib/api/users"
 import { backendGetUserById } from "@/lib/api/users"
 import { ApiError } from "@/lib/api/client"
 import { backendListApartments, type BackendApartment } from "@/lib/api/properties"
-import { backendApproveBooking, backendCancelBooking, backendLandlordBookings } from "@/lib/api/bookings"
+import { backendApproveBooking, backendCancelBooking, backendLandlordBookings, backendConfirmBooking } from "@/lib/api/bookings"
 
 export default function LandlordDashboard() {
   const router = useRouter()
@@ -116,7 +117,7 @@ export default function LandlordDashboard() {
           for (const apt of Array.isArray(apts) ? apts : []) {
             for (const u of apt.units ?? []) {
               unitMap.set(String(u.id), {
-                unit: String((u as any).unit_number_or_id ?? u.id).slice(0, 16),
+                unit: String((u as any).unit_number_or_id ?? u.id),
                 propertyId: String(apt.id),
                 propertyName: apt.name,
               })
@@ -320,6 +321,22 @@ export default function LandlordDashboard() {
       setBanner({
         title: "Decline failed",
         message: e instanceof Error ? e.message : "Failed to decline booking.",
+      })
+    } finally {
+      setBookingActionLoading(null)
+    }
+  }
+
+  const confirmBackendBooking = async (bookingId: string) => {
+    setBookingActionLoading(bookingId)
+    try {
+      await backendConfirmBooking(bookingId)
+      setBookings((prev) => prev.map((b: any) => (b.id === bookingId ? { ...b, status: "approved" } : b)))
+      setBanner({ title: "Booking confirmed", message: "The booking has been confirmed successfully." })
+    } catch (e) {
+      setBanner({
+        title: "Confirm failed",
+        message: e instanceof Error ? e.message : "Failed to confirm booking.",
       })
     } finally {
       setBookingActionLoading(null)
@@ -694,6 +711,11 @@ export default function LandlordDashboard() {
                         <div className="flex-1 mb-4 md:mb-0">
                           <div className="flex items-center gap-2 mb-2">
                             <h4 className="font-semibold text-foreground font-montserrat">{booking.tenant}</h4>
+                            {booking.status === "pending" && (
+                              <Badge variant="outline" className="text-orange-600 border-orange-600">
+                                Pending
+                              </Badge>
+                            )}
                           </div>
                           <p className="text-sm text-muted-foreground font-nunito mb-1">
                             {booking.propertyName} - Unit {booking.unit}
@@ -701,11 +723,50 @@ export default function LandlordDashboard() {
                           <div className="flex flex-wrap gap-4 text-xs text-muted-foreground font-nunito">
                             <span>Move-in: {booking.moveInDate}</span>
                             <span>Submitted: {booking.submittedDate}</span>
-                            {"phone" in booking && (booking as any).phone ? <span>Phone: {(booking as any).phone}</span> : null}
+                            {(booking as any).phone && <span>Phone: {(booking as any).phone}</span>}
                           </div>
                         </div>
 
-
+                        {booking.status === "pending" && (
+                          <div className="flex flex-col md:flex-row gap-2">
+                            <Button
+                              size="sm"
+                              className="tyrent-gradient text-white font-nunito"
+                              disabled={bookingActionLoading === booking.id}
+                              onClick={() => confirmBackendBooking(booking.id)}
+                            >
+                              <CheckCircle2 className="h-4 w-4 mr-1" />
+                              {bookingActionLoading === booking.id ? "Please wait..." : "Confirm"}
+                            </Button>
+                            {(booking as any).phone && (
+                              <Button
+                                asChild
+                                variant="outline"
+                                size="sm"
+                                className="font-nunito bg-transparent"
+                              >
+                                <a
+                                  href={`https://wa.me/${(booking as any).phone.replace(/\D/g, "")}`}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                >
+                                  <Phone className="h-4 w-4 mr-1" />
+                                  WhatsApp
+                                </a>
+                              </Button>
+                            )}
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="text-red-600 border-red-600 font-nunito bg-transparent"
+                              disabled={bookingActionLoading === booking.id}
+                              onClick={() => declineBackendBooking(booking.id)}
+                            >
+                              <XCircle className="h-4 w-4 mr-1" />
+                              Reject
+                            </Button>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>

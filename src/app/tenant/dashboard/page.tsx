@@ -212,6 +212,14 @@ export default function TenantDashboard() {
     return paymentHistory.filter((p) => p.status === "paid").reduce((sum, p) => sum + p.amount, 0)
   }, [paymentHistory])
 
+  const totalAmount = useMemo(() => {
+    return paymentHistory.reduce((sum, p) => sum + p.amount, 0)
+  }, [paymentHistory])
+
+  const pendingBookingsCount = useMemo(() => {
+    return paymentHistory.filter((p) => p.status === "pending").length
+  }, [paymentHistory])
+
   const activeMaintenanceCount = useMemo(() => {
     return maintenanceRequests.filter((r) => r.status !== "resolved").length
   }, [maintenanceRequests])
@@ -404,7 +412,7 @@ export default function TenantDashboard() {
 
             {/* Overview Tab */}
             <TabsContent value="overview" className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
                   <Card className="tyrent-card-hover">
                     <CardContent className="p-6">
@@ -430,12 +438,29 @@ export default function TenantDashboard() {
                       <div className="w-12 h-12 rounded-lg tyrent-gradient flex items-center justify-center mb-4">
                         <DollarSign className="h-6 w-6 text-white" />
                       </div>
-                      <p className="text-sm text-muted-foreground mb-1 font-nunito">Total Paid</p>
+                      <p className="text-sm text-muted-foreground mb-1 font-nunito">Total Amount</p>
                       <p className="text-3xl font-bold text-foreground font-montserrat">
-                        KES {(totalPaid / 1000).toFixed(0)}K
+                        KES {(totalAmount / 1000).toFixed(0)}K
                       </p>
                       <p className="text-xs text-muted-foreground mt-2 font-nunito">
                         {paymentHistory.length} payments recorded
+                      </p>
+                    </CardContent>
+                  </Card>
+                </motion.div>
+
+                <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
+                  <Card className="tyrent-card-hover">
+                    <CardContent className="p-6">
+                      <div className="w-12 h-12 rounded-lg bg-orange-500 flex items-center justify-center mb-4">
+                        <Clock className="h-6 w-6 text-white" />
+                      </div>
+                      <p className="text-sm text-muted-foreground mb-1 font-nunito">Pending Bookings</p>
+                      <p className="text-3xl font-bold text-foreground font-montserrat">
+                        {pendingBookingsCount}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-2 font-nunito">
+                        {pendingBookingsCount > 0 ? "Awaiting confirmation" : "All bookings confirmed"}
                       </p>
                     </CardContent>
                   </Card>
@@ -563,9 +588,19 @@ export default function TenantDashboard() {
                               <p className="font-semibold text-foreground font-montserrat">
                                 KES {payment.amount.toLocaleString()}
                               </p>
-                              <Badge variant="outline" className="text-green-600 border-green-600">
-                                Paid
-                              </Badge>
+                              {payment.note?.includes("PENDING") ? (
+                                <Badge variant="outline" className="text-orange-600 border-orange-600">
+                                  Pending
+                                </Badge>
+                              ) : payment.status === "paid" ? (
+                                <Badge variant="outline" className="text-green-600 border-green-600">
+                                  Confirmed
+                                </Badge>
+                              ) : (
+                                <Badge variant="outline" className="text-muted-foreground">
+                                  {payment.status}
+                                </Badge>
+                              )}
                             </div>
                             <p className="text-sm text-muted-foreground font-nunito mb-1">
                               Payment Date: {payment.date}
