@@ -8,7 +8,8 @@ export const PageRoutes = {
   LANDLORD_DASHBOARD: "/landlord/dashboard",
   LANDLORD_CREATE_PROPERTY: "/landlord/properties/new",
   LANDLORD_PROPERTY_CHECKOUT: "/landlord/properties/checkout",
-LANDLORD_PROPERTY_CONFIRMATION: "/landlord/properties/confirmation",
+  LANDLORD_PROPERTY_CONFIRMATION: "/landlord/properties/confirmation",
+  LANDLORD_SUBSCRIPTION_PENDING: "/landlord/subscription/pending",
 
   // Tenant routes
   TENANT_DASHBOARD: "/tenant/dashboard",
@@ -17,6 +18,7 @@ LANDLORD_PROPERTY_CONFIRMATION: "/landlord/properties/confirmation",
   BOOKING: (propertyId: string) => `/booking/${propertyId}`,
   BOOKING_CHECKOUT: "/booking/checkout",
   BOOKING_CONFIRMATION: "/booking/confirmation",
+  BOOKING_PENDING: "/booking/pending",
 
   // Admin routes
   ADMIN_DASHBOARD: "/admin/dashboard",

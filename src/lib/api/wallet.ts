@@ -10,26 +10,19 @@ export type BackendInitiatePaymentResponse = {
   details?: unknown
 }
 
-const INITIATE_PATHS = ["/api/wallet/pay/", "/api/wallet/initiate-payment/", "/api/wallet/payments/initiate/", "/api/wallet/initiate/"]
-
-export async function backendInitiateMpesaPayment(payload: { phone: string; amount: string | number; booking_id: string }) {
-  let lastError: unknown = null
-  for (const path of INITIATE_PATHS) {
-    try {
-      return await apiRequest<BackendInitiatePaymentResponse>({
-        path,
-        method: "POST",
-        body: payload,
-      })
-    } catch (err) {
-      lastError = err
-      if (err instanceof ApiError && err.status === 404) continue
-      throw err
-    }
-  }
-  throw lastError instanceof Error ? lastError : new Error("M-Pesa initiate endpoint not found.")
+// Booking payment — sends unit_id, booking created only after payment succeeds
+export async function backendInitiateMpesaPayment(payload: { 
+  phone: string
+  unit_id: string  // changed from booking_id
+}) {
+  return apiRequest<BackendInitiatePaymentResponse>({
+    path: "/api/wallet/pay/",
+    method: "POST",
+    body: payload,
+  })
 }
 
+// Subscription payment — unchanged
 export async function backendInitiateSubscriptionPayment(payload: {
   phone: string
   apartment_id?: string
@@ -38,5 +31,12 @@ export async function backendInitiateSubscriptionPayment(payload: {
     path: "/api/wallet/subscription/",
     method: "POST",
     body: payload,
+  })
+}
+
+export function backendCheckSubscription() {
+  return apiRequest<{ has_active: boolean }>({
+    path: "/api/wallet/subscription/status/",
+    method: "GET",
   })
 }
