@@ -28,6 +28,7 @@ import {
   Dumbbell,
   Users,
   Trash2,
+  Loader2,
 } from "lucide-react"
 import { PageRoutes } from "@/constants/page-routes"
 import { ApiError } from "@/lib/api/client"
@@ -48,6 +49,7 @@ import {
   backendUploadApartmentImage,
   backendUploadUnitImages,
 } from "@/lib/api/properties"
+import { backendCheckSubscription } from "@/lib/api/wallet"
 
 const steps = [
   { id: 1, name: "Property Info", icon: Building2 },
@@ -87,7 +89,9 @@ export default function NewPropertyListing() {
   const searchParams = useSearchParams()
   const editId = searchParams.get("edit")
 
+  const [subscriptionChecked, setSubscriptionChecked] = useState(false)
   const [currentStep, setCurrentStep] = useState(1)
+  const [hasActiveSubscription, setHasActiveSubscription] = useState<boolean | null>(null)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [amenityOptions, setAmenityOptions] = useState<Array<{ id: string; name: string }>>([])
@@ -246,6 +250,32 @@ export default function NewPropertyListing() {
       cancelled = true
     }
   }, [editId])
+
+  useEffect(() => {
+    const checkSubscription = async () => {
+      try {
+        const sub = await backendCheckSubscription()
+        if (!sub.has_active) {
+          router.replace(PageRoutes.LANDLORD_PROPERTY_CHECKOUT)
+          return
+        }
+      } catch {
+        router.replace(PageRoutes.LANDLORD_PROPERTY_CHECKOUT)
+        return
+      }
+      setSubscriptionChecked(true)
+    }
+    void checkSubscription()
+  }, [router])
+  
+  // Show a loading state while checking
+  if (!hasActiveSubscription) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    )
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -432,6 +462,8 @@ export default function NewPropertyListing() {
     }
 
     setIsSubmitting(true)
+    let createdApartment: { id: string } | null = null
+    
     try {
       const address = [formData.street.trim(), formData.area.trim(), formData.county].filter(Boolean).join(", ")
       const overview_description = formData.description.trim()
@@ -497,6 +529,7 @@ export default function NewPropertyListing() {
                 longitude: typeof longitude === "number" && Number.isFinite(longitude) ? longitude : null,
               }))
 
+      createdApartment = apartment
       // If we have more than one uploaded image, push the first extra one via the dedicated upload endpoint.
       if (formData.propertyImages.length > 1) {
         for (const img of formData.propertyImages.slice(1, 6)) {
@@ -579,31 +612,77 @@ export default function NewPropertyListing() {
 
       // Redirect to checkout for subscription payment
       const propertyPayload = {
-        id: apartment.id,  // ← add this so checkout can link payment to apartment
+        id: apartment.id,  // ← must be the real UUID from the backend response
         propertyName: formData.propertyName.trim(),
         address: [formData.street.trim(), formData.area.trim(), formData.county].filter(Boolean).join(", "),
         description: formData.description.trim(),
         units: formData.units.length,
       }
+      
+      console.log("Redirecting with apartment id:", apartment.id) // add this to debug
+      
       router.push(
         `${PageRoutes.LANDLORD_PROPERTY_CHECKOUT}?property=${encodeURIComponent(JSON.stringify(propertyPayload))}`
       )
-    } catch (e) {
-      const msg =
-        e instanceof ApiError
+
+  } catch (e) {
+    const msg =
+      e instanceof ApiError
+        ? e.message
+        : e instanceof Error
           ? e.message
-          : e instanceof Error
-            ? e.message
-            : "Failed to publish listing. Please try again."
-      setSubmitError(msg)
-    } finally {
-      setIsSubmitting(false)
+          : "Failed to publish listing. Please try again."
+
+    if (
+      msg.toLowerCase().includes("subscription") ||
+      msg.toLowerCase().includes("payment before listing")
+    ) {
+      // If apartment was created before the error, pass its id
+      // If not (error happened at creation), redirect without id
+      if (createdApartment) {
+        const propertyPayload = {
+          id: createdApartment.id,
+          propertyName: formData.propertyName.trim(),
+          address: [formData.street.trim(), formData.area.trim(), formData.county].filter(Boolean).join(", "),
+          description: formData.description.trim(),
+          units: formData.units.length,
+        }
+        router.push(
+          `${PageRoutes.LANDLORD_PROPERTY_CHECKOUT}?property=${encodeURIComponent(JSON.stringify(propertyPayload))}`
+        )
+      } else {
+        router.push(PageRoutes.LANDLORD_PROPERTY_CHECKOUT)
+      }
+      return
     }
+
+    setSubmitError(msg)
+  } finally {
+    setIsSubmitting(false)
   }
+}
 
   return (
     <div className="min-h-screen bg-background">
       <div className="pt-24 pb-16">
+        {hasActiveSubscription === false && (
+        <div className="mb-6 rounded-lg border border-yellow-200 bg-yellow-50 dark:bg-yellow-950/20 p-4 flex items-center justify-between">
+          <div>
+            <p className="font-semibold text-yellow-800 dark:text-yellow-200 font-montserrat">
+              Subscription Required
+            </p>
+            <p className="text-sm text-yellow-700 dark:text-yellow-300 font-nunito">
+              You need an active subscription to publish a listing.
+            </p>
+          </div>
+          <Button
+            onClick={() => router.push(PageRoutes.LANDLORD_PROPERTY_CHECKOUT)}
+            className="tyrent-gradient text-white font-nunito shrink-0 ml-4"
+          >
+            Subscribe Now
+          </Button>
+        </div>
+      )}
         <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-5xl">
           {/* Header */}
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center mb-8">

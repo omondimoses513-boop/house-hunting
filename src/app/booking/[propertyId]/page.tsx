@@ -130,33 +130,34 @@ export default function BookingCheckout() {
       setSubmitError("No unit selected for this booking.")
       return
     }
-    if (paymentMethod === "mpesa" && !phoneNumber.trim()) {
+    if (!phoneNumber.trim()) {
       setSubmitError("Please enter your M-Pesa phone number.")
       return
     }
+  
     setIsSubmitting(true)
-    setSubmitStage("creating")
+    setSubmitStage("initiating")
+  
     try {
-      const booking = await backendCreateBooking({
-        unit: String(selectedUnit.id),
-        move_in_date: moveInDate,
-        booking_amount: bookingFee,
-        lease_agreement_acknowledged: true,
+      // No booking creation — just initiate payment with unit_id
+      const response = await backendInitiateMpesaPayment({
+        phone: phoneNumber.trim(),
+        unit_id: String(selectedUnit.id),
       })
-
-      if (paymentMethod === "mpesa") {
-        setSubmitStage("initiating")
-        await backendInitiateMpesaPayment({
-          phone: phoneNumber.trim(),
-          amount: total,
-          booking_id: String(booking.id),
-        })
-      }
-
+  
       setSubmitStage("finishing")
-      router.push(`${PageRoutes.BOOKING_CONFIRMATION}?booking=${encodeURIComponent(String(booking.id))}`)
+  
+      // Redirect to a waiting page — booking doesn't exist yet
+      if (!response.checkout_request_id) {
+        setSubmitError("Payment initiated but no confirmation received. Please contact support.")
+        return
+      }
+      
+      router.push(
+        `${PageRoutes.BOOKING_PENDING}?checkout_request_id=${encodeURIComponent(response.checkout_request_id)}&unit=${encodeURIComponent(String(selectedUnit.id))}`
+      )
     } catch (e) {
-      const msg = e instanceof ApiError ? e.message : e instanceof Error ? e.message : "Booking failed. Please try again."
+      const msg = e instanceof ApiError ? e.message : e instanceof Error ? e.message : "Payment failed. Please try again."
       setSubmitError(msg)
     } finally {
       setIsSubmitting(false)

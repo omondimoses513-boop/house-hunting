@@ -8,7 +8,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { ApiError } from "@/lib/api/client"
-import { backendInitiateSubscriptionPayment } from "@/lib/api/wallet"
+import { backendInitiateSubscriptionPayment, backendCheckSubscription } from "@/lib/api/wallet"
 import { requireAuth } from "@/lib/route-guards"
 import { PageRoutes } from "@/constants/page-routes"
 import {
@@ -59,23 +59,18 @@ export default function PropertyListingCheckout() {
     setIsSubmitting(true)
     setSubmitStage("initiating")
     try {
-      await backendInitiateSubscriptionPayment({
+      const response = await backendInitiateSubscriptionPayment({
         phone: phoneNumber.trim(),
-        apartment_id: propertyData?.id,  // ← this now has the real UUID
+        // No apartment_id — subscription is paid before listing
       })
       setSubmitStage("finishing")
       router.push(
-        `${PageRoutes.LANDLORD_PROPERTY_CONFIRMATION}?property=${encodeURIComponent(
-          JSON.stringify(propertyData || {})
+        `/landlord/subscription/pending?checkout_request_id=${encodeURIComponent(
+          response.checkout_request_id ?? ""
         )}`
       )
     } catch (e) {
-      const msg =
-        e instanceof ApiError
-          ? e.message
-          : e instanceof Error
-          ? e.message
-          : "Payment failed. Please try again."
+      const msg = e instanceof ApiError ? e.message : e instanceof Error ? e.message : "Payment failed."
       setSubmitError(msg)
     } finally {
       setIsSubmitting(false)
