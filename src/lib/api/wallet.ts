@@ -29,3 +29,14 @@ export async function backendInitiateMpesaPayment(payload: { phone: string; amou
   }
   throw lastError instanceof Error ? lastError : new Error("M-Pesa initiate endpoint not found.")
 }
+
+export async function backendInitiateSubscriptionPayment(payload: {
+  phone: string
+  apartment_id?: string
+}) {
+  return apiRequest<BackendInitiatePaymentResponse>({
+    path: "/api/wallet/subscription/",
+    method: "POST",
+    body: payload,
+  })
+}

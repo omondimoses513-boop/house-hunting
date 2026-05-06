@@ -8,7 +8,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { ApiError } from "@/lib/api/client"
-import { backendInitiateMpesaPayment } from "@/lib/api/wallet"
+import { backendInitiateSubscriptionPayment } from "@/lib/api/wallet"
 import { requireAuth } from "@/lib/route-guards"
 import { PageRoutes } from "@/constants/page-routes"
 import {
@@ -30,7 +30,9 @@ export default function PropertyListingCheckout() {
   const [submitStage, setSubmitStage] = useState<"idle" | "creating" | "initiating" | "finishing">("idle")
   const paymentMethod = "mpesa"
 
-  const propertyData = searchParams.get("property") ? JSON.parse(decodeURIComponent(searchParams.get("property") || "{}")) : null
+  const propertyData = searchParams.get("property") 
+  ? JSON.parse(decodeURIComponent(searchParams.get("property") || "{}")) 
+  : null
 
   useEffect(() => {
     const auth = requireAuth({ role: "landlord" })
@@ -49,28 +51,31 @@ export default function PropertyListingCheckout() {
       setSubmitError("Please accept terms and conditions.")
       return
     }
-    if (paymentMethod === "mpesa" && !phoneNumber.trim()) {
+    if (!phoneNumber.trim()) {
       setSubmitError("Please enter your M-Pesa phone number.")
       return
     }
-
+  
     setIsSubmitting(true)
     setSubmitStage("initiating")
     try {
-      if (paymentMethod === "mpesa") {
-        await backendInitiateMpesaPayment({
-          phone: phoneNumber.trim(),
-          amount: String(total),
-          booking_id: "property-subscription",
-        })
-      }
-
+      await backendInitiateSubscriptionPayment({
+        phone: phoneNumber.trim(),
+        apartment_id: propertyData?.id,  // ← this now has the real UUID
+      })
       setSubmitStage("finishing")
       router.push(
-        `${PageRoutes.LANDLORD_PROPERTY_CONFIRMATION}?property=${encodeURIComponent(JSON.stringify(propertyData || {}))}`
+        `${PageRoutes.LANDLORD_PROPERTY_CONFIRMATION}?property=${encodeURIComponent(
+          JSON.stringify(propertyData || {})
+        )}`
       )
     } catch (e) {
-      const msg = e instanceof ApiError ? e.message : e instanceof Error ? e.message : "Payment failed. Please try again."
+      const msg =
+        e instanceof ApiError
+          ? e.message
+          : e instanceof Error
+          ? e.message
+          : "Payment failed. Please try again."
       setSubmitError(msg)
     } finally {
       setIsSubmitting(false)

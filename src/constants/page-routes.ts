@@ -7,8 +7,8 @@ export const PageRoutes = {
   // Landlord routes
   LANDLORD_DASHBOARD: "/landlord/dashboard",
   LANDLORD_CREATE_PROPERTY: "/landlord/properties/new",
-  LANDLORD_PROPERTY_CHECKOUT: "/landlord/property-checkout",
-  LANDLORD_PROPERTY_CONFIRMATION: "/landlord/property-confirmation",
+  LANDLORD_PROPERTY_CHECKOUT: "/landlord/properties/checkout",
+LANDLORD_PROPERTY_CONFIRMATION: "/landlord/properties/confirmation",
 
   // Tenant routes
   TENANT_DASHBOARD: "/tenant/dashboard",

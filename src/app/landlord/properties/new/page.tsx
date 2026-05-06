@@ -579,6 +579,7 @@ export default function NewPropertyListing() {
 
       // Redirect to checkout for subscription payment
       const propertyPayload = {
+        id: apartment.id,  // ← add this so checkout can link payment to apartment
         propertyName: formData.propertyName.trim(),
         address: [formData.street.trim(), formData.area.trim(), formData.county].filter(Boolean).join(", "),
         description: formData.description.trim(),
