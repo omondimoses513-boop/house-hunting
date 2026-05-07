@@ -52,7 +52,7 @@ function getNavigationItems(role: string): NavItem[] {
         {
           label: 'Profile',
           icon: User,
-          href: '/landlord/profile',
+          href: '/profile',
           children: [],
         },
       ]
@@ -91,7 +91,7 @@ function getNavigationItems(role: string): NavItem[] {
         {
           label: 'Profile',
           icon: User,
-          href: '/admin/profile',
+          href: '/profile',
           children: [],
         },
       ]
@@ -120,7 +120,7 @@ function getNavigationItems(role: string): NavItem[] {
         {
           label: 'Profile',
           icon: User,
-          href: '/tenant/profile',
+          href: '/profile',
           children: [],
         },
       ]

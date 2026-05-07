@@ -245,7 +245,6 @@ export default function Header() {
             {[
               { href: "/", label: "Home" },
               { href: "/properties", label: "Properties" },
-              { href: "/landlord/register", label: "Become a Landlord" },
               ...(showMyBookings ? [{ href: "/tenant/dashboard", label: "My Bookings" }] : []),
             ].map(({ href, label }) => (
               <Link key={href} href={href}>

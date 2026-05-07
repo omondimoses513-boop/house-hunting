@@ -2,8 +2,10 @@
 
 import React, { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import Link from "next/link"
+import { useRouter } from 'next/navigation'
 import { PageRoutes } from "@/constants/page-routes"
 import { 
   Search, 
@@ -14,11 +16,15 @@ import {
   ChevronRight,
   Star,
   Clock,
-  CheckCircle
+  CheckCircle,
+  AlertCircle
 } from 'lucide-react'
 
 export default function Hero() {
   const [currentSlide, setCurrentSlide] = useState(0)
+  const [user, setUser] = useState<any>(null)
+  const [showTenantWarning, setShowTenantWarning] = useState(false)
+  const router = useRouter()
   
   const slides = [
     {
@@ -52,11 +58,48 @@ export default function Hero() {
   ]
 
   useEffect(() => {
+    // Get user from localStorage
+    const storedUser = localStorage.getItem('current_user')
+    if (storedUser) {
+      try {
+        setUser(JSON.parse(storedUser))
+      } catch (error) {
+        console.error('Error parsing user data:', error)
+      }
+    }
+  }, [])
+
+  useEffect(() => {
     const interval = setInterval(() => {
       setCurrentSlide((prev) => (prev + 1) % slides.length)
     }, 5000)
     return () => clearInterval(interval)
   }, [slides.length])
+
+  const handleListPropertyClick = () => {
+    // Check if user exists and has appropriate role
+    if (!user) {
+      // Not logged in, redirect to login
+      router.push('/auth/login')
+      return
+    }
+
+    const userRole = user?.role
+    const isAllowed = userRole === 'LANDLORD' || userRole === 'ADMIN' || userRole === 'SUPER_ADMIN'
+
+    if (!isAllowed) {
+      // Show toast and warning to tenant
+      toast.error('Landlord Account Required', {
+        description: 'You must have a landlord account to list properties. Please sign in or create a landlord account.',
+        duration: 4000,
+      })
+      setShowTenantWarning(true)
+      return
+    }
+
+    // Allowed user, redirect to create property
+    router.push(PageRoutes.LANDLORD_CREATE_PROPERTY)
+  }
 
   const nextSlide = () => {
     setCurrentSlide((prev) => (prev + 1) % slides.length)
@@ -275,12 +318,10 @@ export default function Hero() {
                 size="lg" 
                 variant="outline" 
                 className="border-2 border-white text-white hover:bg-white hover:text-foreground font-semibold px-8 py-6 text-base rounded-xl backdrop-blur-sm bg-white/10 min-w-[200px] transition-all duration-300"
-                asChild
+                onClick={handleListPropertyClick}
               >
-                <Link href={PageRoutes.LANDLORD_CREATE_PROPERTY}>
-                  <Home className="mr-2 h-5 w-5" />
-                  List Your Property
-                </Link>
+                <Home className="mr-2 h-5 w-5" />
+                List Your Property
               </Button>
             </motion.div>
           </motion.div>
@@ -338,6 +379,62 @@ export default function Hero() {
       >
         <div className="w-full h-full bg-gradient-to-br from-primary/20 to-primary/5 rounded-full blur-3xl" />
       </motion.div>
+
+      {/* Tenant Warning Modal */}
+      <AnimatePresence>
+        {showTenantWarning && (
+          <>
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowTenantWarning(false)}
+              className="fixed inset-0 bg-black/50 z-40"
+            />
+            
+            {/* Modal */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 max-w-sm w-full mx-4"
+            >
+              <div className="bg-card border border-border rounded-2xl shadow-2xl p-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="p-3 bg-amber-500/20 rounded-lg">
+                    <AlertCircle className="h-6 w-6 text-amber-500" />
+                  </div>
+                  <h3 className="text-lg font-bold text-foreground">Only for Landlords</h3>
+                </div>
+                
+                <p className="text-muted-foreground mb-6">
+                  Property listing is only available for landlords and administrators. As a tenant, you can browse and book properties.
+                </p>
+                
+                <div className="flex gap-3">
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowTenantWarning(false)}
+                    className="flex-1"
+                  >
+                    Continue Browsing
+                  </Button>
+                  <Button
+                    className="flex-1 bg-primary hover:bg-primary/90"
+                    onClick={() => {
+                      setShowTenantWarning(false)
+                      router.push('/auth/login')
+                    }}
+                  >
+                    Sign In as Landlord
+                  </Button>
+                </div>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
 
       <style jsx>{`
         .perspective-1000 {
