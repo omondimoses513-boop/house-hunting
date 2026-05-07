@@ -74,16 +74,37 @@ export default function BookingPendingPage() {
               </p>
             </>
           )}
+          {status === "success" && (
+            <>
+              <CheckCircle2 className="h-16 w-16 text-green-500 mx-auto mb-4" />
+              <h2 className="text-2xl font-bold font-montserrat mb-2">Payment Confirmed!</h2>
+              <p className="text-muted-foreground font-nunito">
+                Your booking has been created. Taking you to the confirmation...
+              </p>
+            </>
+          )}
           {status === "failed" && (
             <>
               <XCircle className="h-16 w-16 text-red-500 mx-auto mb-4" />
               <h2 className="text-2xl font-bold font-montserrat mb-2">Payment Not Confirmed</h2>
               <p className="text-muted-foreground font-nunito mb-6">
-                We didn't receive payment confirmation. If you completed the payment, please contact support.
+                We didn&apos;t receive payment confirmation. If you completed the payment, please contact support.
               </p>
-              <Button onClick={() => router.back()} className="w-full">
-                Try Again
-              </Button>
+              <div className="flex flex-col gap-3">
+                <Button
+                  onClick={() => { setStatus("waiting"); setAttempts(0) }}
+                  className="w-full tyrent-gradient text-white font-nunito"
+                >
+                  Check Again
+                </Button>
+                <Button
+                  onClick={() => router.back()}
+                  variant="outline"
+                  className="w-full font-nunito bg-transparent"
+                >
+                  Go Back
+                </Button>
+              </div>
             </>
           )}
         </CardContent>

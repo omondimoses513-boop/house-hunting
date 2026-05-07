@@ -6,9 +6,10 @@ import { useState } from "react"
 import { motion } from "framer-motion"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
+import { KenyanPhoneInput } from "@/components/kenyan-phone-input"
 import { PageRoutes } from "@/constants/page-routes"
 import { AuthAlertBanner } from "@/components/auth/AuthAlertBanner"
-import { Eye, EyeOff, FileText, IdCard, Lock, Mail, Phone, Upload, User, ChevronDown } from "lucide-react"
+import { Eye, EyeOff, FileText, IdCard, Lock, Mail, Upload, User, ChevronDown } from "lucide-react"
 import { backendRegister } from "@/lib/api/auth"
 
 type UserRole = "TENANT" | "LANDLORD"
@@ -184,18 +185,14 @@ export default function RegisterPage() {
                 />
               </div>
 
-              <div className="relative">
-                <Phone
-                  size={18}
-                  className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
-                />
-                <input
-                  type="text"
-                  aria-label="Phone number"
-                  placeholder="Phone number"
+              <div>
+                <label className="block text-sm font-semibold text-foreground mb-2">
+                  Phone number
+                </label>
+                <KenyanPhoneInput
                   value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  className="w-full px-4 py-3 border rounded-lg pl-10"
+                  onChange={setPhone}
+                  disabled={loading}
                 />
               </div>
 

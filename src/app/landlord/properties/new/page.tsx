@@ -256,10 +256,13 @@ export default function NewPropertyListing() {
       try {
         const sub = await backendCheckSubscription()
         if (!sub.has_active) {
+          setHasActiveSubscription(false)
           router.replace(PageRoutes.LANDLORD_PROPERTY_CHECKOUT)
           return
         }
+        setHasActiveSubscription(true)
       } catch {
+        setHasActiveSubscription(false)
         router.replace(PageRoutes.LANDLORD_PROPERTY_CHECKOUT)
         return
       }
@@ -267,15 +270,6 @@ export default function NewPropertyListing() {
     }
     void checkSubscription()
   }, [router])
-  
-  // Show a loading state while checking
-  if (!hasActiveSubscription) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    )
-  }
 
   useEffect(() => {
     let cancelled = false
@@ -305,12 +299,20 @@ export default function NewPropertyListing() {
         if (!cancelled) setAmenityOptions([])
       }
     }
-
     void loadAmenityOptions()
     return () => {
       cancelled = true
     }
   }, [])
+  
+  // Show a loading state while checking subscription
+  if (hasActiveSubscription === null) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    )
+  }
 
   const parsedPropertyImageUrls = (formData.propertyImageUrls || "")
     .split(/[\n,]/)

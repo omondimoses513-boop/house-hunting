@@ -1,11 +1,8 @@
 import type React from "react"
 import type { Metadata } from "next"
 import { ThemeProvider } from "@/components/theme-provider"
-import Header from "@/components/Header" // Import Header component
-import Footer from "@/components/Footer" // Import Footer component
+import { RootLayoutClient } from "@/components/root-layout-client"
 import "./globals.css"
-
-
 
 export const metadata: Metadata = {
   title: "Tyrent - Find Your Perfect Home in Nairobi",
@@ -23,9 +20,7 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body>
         <ThemeProvider defaultTheme="light" storageKey="tyrent-theme">
-          <Header /> {/* Added Header component to layout */}
-          <main className="min-h-screen">{children}</main>
-          <Footer /> {/* Added Footer component to layout */}
+          <RootLayoutClient>{children}</RootLayoutClient>
         </ThemeProvider>
       </body>
     </html>

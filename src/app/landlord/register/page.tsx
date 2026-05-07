@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
+import { KenyanPhoneInput } from "@/components/kenyan-phone-input"
 import {
   User,
   FileText,
@@ -15,7 +16,6 @@ import {
   Upload,
   ArrowRight,
   ArrowLeft,
-  Phone,
   Mail,
   MapPin,
   Award as IdCard,
@@ -243,16 +243,11 @@ export default function LandlordRegister() {
                         <label className="block text-sm font-semibold text-foreground mb-2 font-montserrat">
                           Phone Number *
                         </label>
-                        <div className="relative">
-                          <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                          <input
-                            type="tel"
-                            placeholder="+254 700 000 000"
-                            value={formData.phone}
-                            onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                            className="w-full pl-10 pr-4 py-3 border border-input rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-ring font-nunito"
-                          />
-                        </div>
+                        <KenyanPhoneInput
+                          value={formData.phone}
+                          onChange={(value) => setFormData({ ...formData, phone: value })}
+                          disabled={isSubmitting}
+                        />
                       </div>
 
                       <div>
