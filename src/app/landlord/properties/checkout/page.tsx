@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
+import { KenyanPhoneInput } from "@/components/kenyan-phone-input"
 import { ApiError } from "@/lib/api/client"
 import { backendInitiateSubscriptionPayment, backendCheckSubscription } from "@/lib/api/wallet"
 import { requireAuth } from "@/lib/route-guards"
@@ -47,30 +48,44 @@ export default function PropertyListingCheckout() {
 
   const handleSubmit = async () => {
     setSubmitError(null)
+    
+    // Validation checks
     if (!agreedToTerms) {
       setSubmitError("Please accept terms and conditions.")
       return
     }
+    
     if (!phoneNumber.trim()) {
       setSubmitError("Please enter your M-Pesa phone number.")
+      return
+    }
+    
+    if (phoneNumber.length !== 9) {
+      setSubmitError("Phone number must be exactly 9 digits (e.g., 700000000).")
+      return
+    }
+    
+    if (!/^\d{9}$/.test(phoneNumber)) {
+      setSubmitError("Phone number must contain only digits.")
       return
     }
   
     setIsSubmitting(true)
     setSubmitStage("initiating")
     try {
+      const fullPhoneNumber = `+254${phoneNumber}`
       const response = await backendInitiateSubscriptionPayment({
-        phone: phoneNumber.trim(),
+        phone: fullPhoneNumber,
         // No apartment_id — subscription is paid before listing
       })
       setSubmitStage("finishing")
       router.push(
-        `/landlord/subscription/pending?checkout_request_id=${encodeURIComponent(
+        `${PageRoutes.LANDLORD_SUBSCRIPTION_PENDING}?checkout_request_id=${encodeURIComponent(
           response.checkout_request_id ?? ""
         )}`
       )
     } catch (e) {
-      const msg = e instanceof ApiError ? e.message : e instanceof Error ? e.message : "Payment failed."
+      const msg = e instanceof ApiError ? e.message : e instanceof Error ? e.message : "Payment failed. Please try again."
       setSubmitError(msg)
     } finally {
       setIsSubmitting(false)
@@ -169,12 +184,10 @@ export default function PropertyListingCheckout() {
                               <label className="block text-sm font-semibold text-foreground mb-2 font-montserrat">
                                 M-Pesa Phone Number
                               </label>
-                              <input
-                                type="tel"
-                                placeholder="+254 700 000 000"
+                              <KenyanPhoneInput
                                 value={phoneNumber}
-                                onChange={(e) => setPhoneNumber(e.target.value)}
-                                className="w-full px-4 py-3 border border-input rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-ring font-nunito"
+                                onChange={setPhoneNumber}
+                                disabled={isSubmitting}
                               />
                             </div>
                           )}

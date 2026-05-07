@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
+import { KenyanPhoneInput } from "@/components/kenyan-phone-input"
 import { PageRoutes } from "@/constants/page-routes"
 import { ApiError } from "@/lib/api/client"
 import { backendGetApartment, type BackendApartment, type BackendUnit } from "@/lib/api/properties"
@@ -122,16 +123,35 @@ export default function BookingCheckout() {
 
   const handleSubmit = async () => {
     setSubmitError(null)
-    if (!moveInDate || !agreedToTerms) {
-      setSubmitError("Please provide move-in date and accept terms.")
+    
+    // Validation checks
+    if (!moveInDate) {
+      setSubmitError("Please select a move-in date.")
       return
     }
+    
+    if (!agreedToTerms) {
+      setSubmitError("Please accept the terms and conditions.")
+      return
+    }
+    
     if (!selectedUnit?.id) {
       setSubmitError("No unit selected for this booking.")
       return
     }
+    
     if (!phoneNumber.trim()) {
       setSubmitError("Please enter your M-Pesa phone number.")
+      return
+    }
+    
+    if (phoneNumber.length !== 9) {
+      setSubmitError("Phone number must be exactly 9 digits (e.g., 700000000).")
+      return
+    }
+    
+    if (!/^\d{9}$/.test(phoneNumber)) {
+      setSubmitError("Phone number must contain only digits.")
       return
     }
   
@@ -140,8 +160,9 @@ export default function BookingCheckout() {
   
     try {
       // No booking creation — just initiate payment with unit_id
+      const fullPhoneNumber = `+254${phoneNumber}`
       const response = await backendInitiateMpesaPayment({
-        phone: phoneNumber.trim(),
+        phone: fullPhoneNumber,
         unit_id: String(selectedUnit.id),
       })
   
@@ -311,12 +332,10 @@ export default function BookingCheckout() {
                               <label className="block text-sm font-semibold text-foreground mb-2 font-montserrat">
                                 M-Pesa Phone Number
                               </label>
-                              <input
-                                type="tel"
-                                placeholder="+254 700 000 000"
+                              <KenyanPhoneInput
                                 value={phoneNumber}
-                                onChange={(e) => setPhoneNumber(e.target.value)}
-                                className="w-full px-4 py-3 border border-input rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-ring font-nunito"
+                                onChange={setPhoneNumber}
+                                disabled={isSubmitting}
                               />
                             </div>
                           )}
