@@ -4,7 +4,7 @@ export interface CurrentUser {
   id: string
   username: string
   email: string
-  role: 'LANDLORD' | 'TENANT'
+  role: 'LANDLORD' | 'TENANT' | 'SUPER_ADMIN' | 'ADMIN'
   fullName?: string
 }
 

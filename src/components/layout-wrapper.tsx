@@ -5,7 +5,6 @@ import { usePathname } from 'next/navigation'
 import Header from '@/components/Header'
 import Footer from '@/components/Footer'
 import { Sidebar } from '@/components/sidebar'
-import { useCurrentUser } from '@/hooks/use-current-user'
 
 interface LayoutWrapperProps {
   children: ReactNode
@@ -26,13 +25,10 @@ const SIDEBAR_ROUTES = [
   '/landlord/settings',
   '/landlord/subscription',
   '/booking/pending',
-  '/admin/dashboard',
-  '/profile',
 ]
 
 export function LayoutWrapper({ children }: LayoutWrapperProps) {
   const pathname = usePathname()
-  const { user } = useCurrentUser()
 
   // Determine which layout to use
   const isAuthRoute = AUTH_ROUTES.some((route) => pathname?.startsWith(route))
@@ -48,22 +44,15 @@ export function LayoutWrapper({ children }: LayoutWrapperProps) {
 
   // Dashboard/protected pages: sidebar + content
   if (isSidebarRoute) {
-    const userRole = user?.role === 'LANDLORD' ? 'landlord' : 'tenant'
-    const userName = user?.fullName || user?.username || 'User'
-    const userEmail = user?.email || 'user@example.com'
-
     return (
-      <div className="flex min-h-screen bg-background">
+      <div className="flex min-h-screen bg-background w-full">
         <Sidebar
-          userRole={userRole}
-          userName={userName}
-          userEmail={userEmail}
           onLogout={() => {
             localStorage.removeItem('current_user')
             window.location.href = '/auth/login'
           }}
         />
-        <main className="flex-1 w-full overflow-auto">
+        <main className="flex-1 min-h-screen w-full overflow-auto lg:ml-0">
           {children}
         </main>
       </div>
