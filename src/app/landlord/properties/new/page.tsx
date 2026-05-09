@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
@@ -49,7 +49,6 @@ import {
   backendUploadApartmentImage,
   backendUploadUnitImages,
 } from "@/lib/api/properties"
-import { backendCheckSubscription } from "@/lib/api/wallet"
 
 const steps = [
   { id: 1, name: "Property Info", icon: Building2 },
@@ -89,9 +88,7 @@ export default function NewPropertyListing() {
   const searchParams = useSearchParams()
   const editId = searchParams.get("edit")
 
-  const [subscriptionChecked, setSubscriptionChecked] = useState(false)
   const [currentStep, setCurrentStep] = useState(1)
-  const [hasActiveSubscription, setHasActiveSubscription] = useState<boolean | null>(null)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [amenityOptions, setAmenityOptions] = useState<Array<{ id: string; name: string }>>([])
@@ -166,6 +163,7 @@ export default function NewPropertyListing() {
     return value
   }
 
+  // Load existing listing for edit mode
   useEffect(() => {
     let cancelled = false
     const loadEdit = async () => {
@@ -193,7 +191,6 @@ export default function NewPropertyListing() {
             const idx = raw.indexOf(marker)
             return idx >= 0 ? raw.slice(0, idx).trim() : raw
           })(),
-
           county,
           area,
           street,
@@ -211,7 +208,6 @@ export default function NewPropertyListing() {
             const d = (distances ?? []).find((x: any) => String(x.amenity_type).toUpperCase() === "MARKET")
             return d?.distance_km ? String(d.distance_km) : ""
           })(),
-
           selectedAmenities: [],
           selectedAmenityIds: (apt.amenities ?? []).map((a: any) => String(a.id)).filter(Boolean),
           customAmenities: (() => {
@@ -219,12 +215,10 @@ export default function NewPropertyListing() {
             const m = raw.match(/\n\nAmenities:\s*([^\n]+)\s*$/)
             return m?.[1] ? String(m[1]).trim() : ""
           })(),
-
           propertyImages: [],
           propertyImageUrls: apt.exterior_image_url ? String(apt.exterior_image_url) : "",
           virtualTourUrl: apt.virtual_tour_url ? String(apt.virtual_tour_url) : "",
           leaseAgreement: null,
-
           units: (units ?? []).map((u) => ({
             id: String(u.id),
             unitNumber: String(u.unit_number_or_id ?? ""),
@@ -242,35 +236,14 @@ export default function NewPropertyListing() {
         }))
         setCurrentStep(1)
       } catch {
-        // If we can't load the listing, keep the create flow and allow user to re-publish.
+        // If we can't load the listing, keep the create flow
       }
     }
     void loadEdit()
-    return () => {
-      cancelled = true
-    }
+    return () => { cancelled = true }
   }, [editId])
 
-  useEffect(() => {
-    const checkSubscription = async () => {
-      try {
-        const sub = await backendCheckSubscription()
-        if (!sub.has_active) {
-          setHasActiveSubscription(false)
-          router.replace(PageRoutes.LANDLORD_PROPERTY_CHECKOUT)
-          return
-        }
-        setHasActiveSubscription(true)
-      } catch {
-        setHasActiveSubscription(false)
-        router.replace(PageRoutes.LANDLORD_PROPERTY_CHECKOUT)
-        return
-      }
-      setSubscriptionChecked(true)
-    }
-    void checkSubscription()
-  }, [router])
-
+  // Load amenity options
   useEffect(() => {
     let cancelled = false
     const loadAmenityOptions = async () => {
@@ -281,9 +254,8 @@ export default function NewPropertyListing() {
           return
         }
       } catch {
-        // Fallback below if amenities endpoint is not exposed.
+        // Fallback below
       }
-
       try {
         const apartments = await backendListApartments()
         const map = new Map<string, string>()
@@ -300,19 +272,25 @@ export default function NewPropertyListing() {
       }
     }
     void loadAmenityOptions()
-    return () => {
-      cancelled = true
-    }
+    return () => { cancelled = true }
   }, [])
-  
-  // Show a loading state while checking subscription
-  if (hasActiveSubscription === null) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    )
-  }
+
+  // TODO: Re-enable subscription gate after product launch
+  // useEffect(() => {
+  //   const checkSubscription = async () => {
+  //     try {
+  //       const sub = await backendCheckSubscription()
+  //       if (!sub.has_active) {
+  //         router.replace(PageRoutes.LANDLORD_PROPERTY_CHECKOUT)
+  //         return
+  //       }
+  //     } catch {
+  //       router.replace(PageRoutes.LANDLORD_PROPERTY_CHECKOUT)
+  //       return
+  //     }
+  //   }
+  //   void checkSubscription()
+  // }, [router])
 
   const parsedPropertyImageUrls = (formData.propertyImageUrls || "")
     .split(/[\n,]/)
@@ -332,8 +310,7 @@ export default function NewPropertyListing() {
       .split(",")
       .map((s) => s.trim())
       .filter(Boolean)
-    const all = Array.from(new Set([...pickedFromIds, ...pickedLegacy, ...extra]))
-    return all
+    return Array.from(new Set([...pickedFromIds, ...pickedLegacy, ...extra]))
   }
 
   const buildRulesPayload = () => {
@@ -345,15 +322,11 @@ export default function NewPropertyListing() {
   }
 
   const handleNext = () => {
-    if (currentStep < steps.length) {
-      setCurrentStep(currentStep + 1)
-    }
+    if (currentStep < steps.length) setCurrentStep(currentStep + 1)
   }
 
   const handlePrevious = () => {
-    if (currentStep > 1) {
-      setCurrentStep(currentStep - 1)
-    }
+    if (currentStep > 1) setCurrentStep(currentStep - 1)
   }
 
   const toggleAmenity = (amenityId: string) => {
@@ -367,18 +340,12 @@ export default function NewPropertyListing() {
 
   const handlePropertyImagesUpload = (files: FileList | null) => {
     if (files) {
-      setFormData({
-        ...formData,
-        propertyImages: [...formData.propertyImages, ...Array.from(files)],
-      })
+      setFormData({ ...formData, propertyImages: [...formData.propertyImages, ...Array.from(files)] })
     }
   }
 
   const removePropertyImage = (index: number) => {
-    setFormData({
-      ...formData,
-      propertyImages: formData.propertyImages.filter((_, i) => i !== index),
-    })
+    setFormData({ ...formData, propertyImages: formData.propertyImages.filter((_, i) => i !== index) })
   }
 
   const handleUnitImagesUpload = (files: FileList | null) => {
@@ -386,10 +353,8 @@ export default function NewPropertyListing() {
       const picked = Array.from(files)
       setCurrentUnit({
         ...currentUnit,
-        interiorImages:
-          unitUploadType === "interior" ? [...currentUnit.interiorImages, ...picked] : currentUnit.interiorImages,
-        exteriorImages:
-          unitUploadType === "exterior" ? [...currentUnit.exteriorImages, ...picked] : currentUnit.exteriorImages,
+        interiorImages: unitUploadType === "interior" ? [...currentUnit.interiorImages, ...picked] : currentUnit.interiorImages,
+        exteriorImages: unitUploadType === "exterior" ? [...currentUnit.exteriorImages, ...picked] : currentUnit.exteriorImages,
       })
     }
   }
@@ -397,18 +362,13 @@ export default function NewPropertyListing() {
   const removeUnitImage = (type: "interior" | "exterior", index: number) => {
     setCurrentUnit({
       ...currentUnit,
-      interiorImages:
-        type === "interior" ? currentUnit.interiorImages.filter((_, i) => i !== index) : currentUnit.interiorImages,
-      exteriorImages:
-        type === "exterior" ? currentUnit.exteriorImages.filter((_, i) => i !== index) : currentUnit.exteriorImages,
+      interiorImages: type === "interior" ? currentUnit.interiorImages.filter((_, i) => i !== index) : currentUnit.interiorImages,
+      exteriorImages: type === "exterior" ? currentUnit.exteriorImages.filter((_, i) => i !== index) : currentUnit.exteriorImages,
     })
   }
 
   const addUnit = () => {
-    setFormData({
-      ...formData,
-      units: [...formData.units, currentUnit],
-    })
+    setFormData({ ...formData, units: [...formData.units, currentUnit] })
     setCurrentUnit({
       id: Date.now().toString(),
       unitNumber: "",
@@ -427,10 +387,7 @@ export default function NewPropertyListing() {
   }
 
   const removeUnit = (id: string) => {
-    setFormData({
-      ...formData,
-      units: formData.units.filter((u) => u.id !== id),
-    })
+    setFormData({ ...formData, units: formData.units.filter((u) => u.id !== id) })
   }
 
   const handleSubmit = async () => {
@@ -464,8 +421,7 @@ export default function NewPropertyListing() {
     }
 
     setIsSubmitting(true)
-    let createdApartment: { id: string } | null = null
-    
+
     try {
       const address = [formData.street.trim(), formData.area.trim(), formData.county].filter(Boolean).join(", ")
       const overview_description = formData.description.trim()
@@ -531,8 +487,7 @@ export default function NewPropertyListing() {
                 longitude: typeof longitude === "number" && Number.isFinite(longitude) ? longitude : null,
               }))
 
-      createdApartment = apartment
-      // If we have more than one uploaded image, push the first extra one via the dedicated upload endpoint.
+      // Upload extra property images (beyond the first)
       if (formData.propertyImages.length > 1) {
         for (const img of formData.propertyImages.slice(1, 6)) {
           try {
@@ -543,6 +498,7 @@ export default function NewPropertyListing() {
         }
       }
 
+      // Set amenity distances
       const roadKm = parseDistanceKm(formData.distanceToRoad)
       const schoolKm = parseDistanceKm(formData.distanceToSchool)
       const marketKm = parseDistanceKm(formData.distanceToMarket)
@@ -560,7 +516,7 @@ export default function NewPropertyListing() {
         }
       }
 
-      // Units: update existing (uuid) and create new.
+      // Create / update units
       for (const u of formData.units) {
         const payload = {
           apartment: apartment.id,
@@ -574,6 +530,7 @@ export default function NewPropertyListing() {
         }
         const isBackendId = typeof u.id === "string" && u.id.includes("-") && u.id.length > 20
         let savedUnitId = u.id
+
         if (editId && isBackendId) {
           const updated = await backendUpdateUnit(u.id, {
             unit_number_or_id: payload.unit_number_or_id,
@@ -603,7 +560,7 @@ export default function NewPropertyListing() {
         }
       }
 
-      // Lease agreement upload (optional)
+      // Upload lease agreement (optional)
       if (formData.leaseAgreement) {
         try {
           await backendUploadLeaseAgreement(apartment.id, formData.leaseAgreement)
@@ -612,79 +569,26 @@ export default function NewPropertyListing() {
         }
       }
 
-      // Redirect to checkout for subscription payment
-      const propertyPayload = {
-        id: apartment.id,  // ← must be the real UUID from the backend response
-        propertyName: formData.propertyName.trim(),
-        address: [formData.street.trim(), formData.area.trim(), formData.county].filter(Boolean).join(", "),
-        description: formData.description.trim(),
-        units: formData.units.length,
-      }
-      
-      console.log("Redirecting with apartment id:", apartment.id) // add this to debug
-      
-      router.push(
-        `${PageRoutes.LANDLORD_PROPERTY_CHECKOUT}?property=${encodeURIComponent(JSON.stringify(propertyPayload))}`
-      )
+      // TODO: After product launch, redirect to checkout for subscription payment instead
+      // router.push(`${PageRoutes.LANDLORD_PROPERTY_CHECKOUT}?property=...`)
+      router.push(PageRoutes.LANDLORD_PROPERTY_CONFIRMATION)
 
-  } catch (e) {
-    const msg =
-      e instanceof ApiError
-        ? e.message
-        : e instanceof Error
+    } catch (e) {
+      const msg =
+        e instanceof ApiError
           ? e.message
-          : "Failed to publish listing. Please try again."
-
-    if (
-      msg.toLowerCase().includes("subscription") ||
-      msg.toLowerCase().includes("payment before listing")
-    ) {
-      // If apartment was created before the error, pass its id
-      // If not (error happened at creation), redirect without id
-      if (createdApartment) {
-        const propertyPayload = {
-          id: createdApartment.id,
-          propertyName: formData.propertyName.trim(),
-          address: [formData.street.trim(), formData.area.trim(), formData.county].filter(Boolean).join(", "),
-          description: formData.description.trim(),
-          units: formData.units.length,
-        }
-        router.push(
-          `${PageRoutes.LANDLORD_PROPERTY_CHECKOUT}?property=${encodeURIComponent(JSON.stringify(propertyPayload))}`
-        )
-      } else {
-        router.push(PageRoutes.LANDLORD_PROPERTY_CHECKOUT)
-      }
-      return
+          : e instanceof Error
+            ? e.message
+            : "Failed to publish listing. Please try again."
+      setSubmitError(msg)
+    } finally {
+      setIsSubmitting(false)
     }
-
-    setSubmitError(msg)
-  } finally {
-    setIsSubmitting(false)
   }
-}
 
   return (
     <div className="min-h-screen bg-background">
       <div className="pt-24 pb-16">
-        {hasActiveSubscription === false && (
-        <div className="mb-6 rounded-lg border border-yellow-200 bg-yellow-50 dark:bg-yellow-950/20 p-4 flex items-center justify-between">
-          <div>
-            <p className="font-semibold text-yellow-800 dark:text-yellow-200 font-montserrat">
-              Subscription Required
-            </p>
-            <p className="text-sm text-yellow-700 dark:text-yellow-300 font-nunito">
-              You need an active subscription to publish a listing.
-            </p>
-          </div>
-          <Button
-            onClick={() => router.push(PageRoutes.LANDLORD_PROPERTY_CHECKOUT)}
-            className="tyrent-gradient text-white font-nunito shrink-0 ml-4"
-          >
-            Subscribe Now
-          </Button>
-        </div>
-      )}
         <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-5xl">
           {/* Header */}
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center mb-8">
@@ -719,6 +623,7 @@ export default function NewPropertyListing() {
           <Card className="shadow-xl border-0">
             <CardContent className="p-6 md:p-8">
               <AnimatePresence mode="wait">
+
                 {/* Step 1: Property Information */}
                 {currentStep === 1 && (
                   <motion.div
@@ -775,7 +680,7 @@ export default function NewPropertyListing() {
                         Property Rules & Policies
                       </label>
                       <textarea
-                        placeholder="e.g., No pets allowed, Quiet hours from 10 PM to 6 AM, Visitors must register at reception..."
+                        placeholder="e.g., No pets allowed, Quiet hours from 10 PM to 6 AM..."
                         value={formData.rules}
                         onChange={(e) => setFormData({ ...formData, rules: e.target.value })}
                         rows={4}
@@ -799,14 +704,11 @@ export default function NewPropertyListing() {
                       <p className="text-muted-foreground font-nunito">Where is your property located?</p>
                     </div>
 
-                    {/* Location */}
                     <div className="space-y-4">
                       <h3 className="text-lg font-semibold text-foreground font-montserrat">Location Details</h3>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
-                          <label className="block text-sm font-semibold text-foreground mb-2 font-montserrat">
-                            County *
-                          </label>
+                          <label className="block text-sm font-semibold text-foreground mb-2 font-montserrat">County *</label>
                           <select
                             value={formData.county}
                             onChange={(e) => setFormData({ ...formData, county: e.target.value })}
@@ -820,9 +722,7 @@ export default function NewPropertyListing() {
                         </div>
 
                         <div>
-                          <label className="block text-sm font-semibold text-foreground mb-2 font-montserrat">
-                            Area/Estate *
-                          </label>
+                          <label className="block text-sm font-semibold text-foreground mb-2 font-montserrat">Area/Estate *</label>
                           <input
                             type="text"
                             placeholder="e.g., Kilimani, Westlands"
@@ -833,9 +733,7 @@ export default function NewPropertyListing() {
                         </div>
 
                         <div className="md:col-span-2">
-                          <label className="block text-sm font-semibold text-foreground mb-2 font-montserrat">
-                            Street Address *
-                          </label>
+                          <label className="block text-sm font-semibold text-foreground mb-2 font-montserrat">Street Address *</label>
                           <input
                             type="text"
                             placeholder="Enter street address"
@@ -846,9 +744,7 @@ export default function NewPropertyListing() {
                         </div>
 
                         <div>
-                          <label className="block text-sm font-semibold text-foreground mb-2 font-montserrat">
-                            Latitude (optional)
-                          </label>
+                          <label className="block text-sm font-semibold text-foreground mb-2 font-montserrat">Latitude (optional)</label>
                           <input
                             type="number"
                             inputMode="decimal"
@@ -860,9 +756,7 @@ export default function NewPropertyListing() {
                         </div>
 
                         <div>
-                          <label className="block text-sm font-semibold text-foreground mb-2 font-montserrat">
-                            Longitude (optional)
-                          </label>
+                          <label className="block text-sm font-semibold text-foreground mb-2 font-montserrat">Longitude (optional)</label>
                           <input
                             type="number"
                             inputMode="decimal"
@@ -874,9 +768,7 @@ export default function NewPropertyListing() {
                         </div>
 
                         <div>
-                          <label className="block text-sm font-semibold text-foreground mb-2 font-montserrat">
-                            Distance to Main Road
-                          </label>
+                          <label className="block text-sm font-semibold text-foreground mb-2 font-montserrat">Distance to Main Road</label>
                           <input
                             type="text"
                             placeholder="e.g., 500m"
@@ -887,9 +779,7 @@ export default function NewPropertyListing() {
                         </div>
 
                         <div>
-                          <label className="block text-sm font-semibold text-foreground mb-2 font-montserrat">
-                            Distance to School
-                          </label>
+                          <label className="block text-sm font-semibold text-foreground mb-2 font-montserrat">Distance to School</label>
                           <input
                             type="text"
                             placeholder="e.g., 1km"
@@ -900,9 +790,7 @@ export default function NewPropertyListing() {
                         </div>
 
                         <div>
-                          <label className="block text-sm font-semibold text-foreground mb-2 font-montserrat">
-                            Distance to Market/Mall
-                          </label>
+                          <label className="block text-sm font-semibold text-foreground mb-2 font-montserrat">Distance to Market/Mall</label>
                           <input
                             type="text"
                             placeholder="e.g., 2km"
@@ -914,7 +802,6 @@ export default function NewPropertyListing() {
                       </div>
                     </div>
 
-                    {/* Amenities */}
                     <div className="space-y-4">
                       <h3 className="text-lg font-semibold text-foreground font-montserrat">Property Amenities</h3>
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -978,12 +865,9 @@ export default function NewPropertyListing() {
                   >
                     <div>
                       <h2 className="text-2xl font-bold text-foreground mb-2 font-montserrat">Images & Documents</h2>
-                      <p className="text-muted-foreground font-nunito">
-                        Upload property images and lease agreement template
-                      </p>
+                      <p className="text-muted-foreground font-nunito">Upload property images and lease agreement template</p>
                     </div>
 
-                    {/* Property Images */}
                     <div className="space-y-4">
                       <h3 className="text-lg font-semibold text-foreground font-montserrat">Property Images *</h3>
                       <p className="text-sm text-muted-foreground font-nunito">
@@ -993,9 +877,7 @@ export default function NewPropertyListing() {
                       <div className="border-2 border-dashed border-border rounded-lg p-6 hover:border-primary transition-colors">
                         <label className="cursor-pointer flex flex-col items-center">
                           <Upload className="h-12 w-12 text-muted-foreground mb-3" />
-                          <span className="text-sm font-medium text-foreground mb-1 font-nunito">
-                            Click to upload images
-                          </span>
+                          <span className="text-sm font-medium text-foreground mb-1 font-nunito">Click to upload images</span>
                           <span className="text-xs text-muted-foreground font-nunito">PNG, JPG up to 5MB each</span>
                           <input
                             type="file"
@@ -1012,7 +894,7 @@ export default function NewPropertyListing() {
                           {formData.propertyImages.map((file, index) => (
                             <div key={index} className="relative group">
                               <img
-                                src={URL.createObjectURL(file) || "/placeholder.svg"}
+                                src={URL.createObjectURL(file)}
                                 alt={`Property ${index + 1}`}
                                 className="w-full h-32 object-cover rounded-lg"
                               />
@@ -1032,7 +914,7 @@ export default function NewPropertyListing() {
                           Or paste image URLs (comma or newline separated)
                         </label>
                         <textarea
-                          placeholder="https://images.unsplash.com/...\nhttps://images.unsplash.com/..."
+                          placeholder="https://images.unsplash.com/..."
                           value={formData.propertyImageUrls}
                           onChange={(e) => setFormData({ ...formData, propertyImageUrls: e.target.value })}
                           rows={3}
@@ -1042,11 +924,7 @@ export default function NewPropertyListing() {
                           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                             {parsedPropertyImageUrls.slice(0, 8).map((url, index) => (
                               <div key={url} className="relative group">
-                                <img
-                                  src={url}
-                                  alt={`URL Image ${index + 1}`}
-                                  className="w-full h-32 object-cover rounded-lg"
-                                />
+                                <img src={url} alt={`URL Image ${index + 1}`} className="w-full h-32 object-cover rounded-lg" />
                               </div>
                             ))}
                           </div>
@@ -1054,10 +932,9 @@ export default function NewPropertyListing() {
                       </div>
                     </div>
 
-                    {/* Virtual tour */}
                     <div className="space-y-2">
                       <label className="block text-sm font-semibold text-foreground font-montserrat">
-                        Virtual tour URL (optional)
+                        Virtual Tour URL (optional)
                       </label>
                       <input
                         type="url"
@@ -1066,19 +943,12 @@ export default function NewPropertyListing() {
                         onChange={(e) => setFormData({ ...formData, virtualTourUrl: e.target.value })}
                         className="w-full px-4 py-3 border border-input rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-ring font-nunito"
                       />
-                      <p className="text-xs text-muted-foreground font-nunito">
-                        If you have a 360 tour link, paste it here.
-                      </p>
+                      <p className="text-xs text-muted-foreground font-nunito">If you have a 360 tour link, paste it here.</p>
                     </div>
 
-                    {/* Lease Agreement */}
                     <div className="space-y-4">
-                      <h3 className="text-lg font-semibold text-foreground font-montserrat">
-                        Lease Agreement Template
-                      </h3>
-                      <p className="text-sm text-muted-foreground font-nunito">
-                        Upload your standard lease agreement (PDF format)
-                      </p>
+                      <h3 className="text-lg font-semibold text-foreground font-montserrat">Lease Agreement Template</h3>
+                      <p className="text-sm text-muted-foreground font-nunito">Upload your standard lease agreement (PDF format)</p>
 
                       <div className="border-2 border-dashed border-border rounded-lg p-6 hover:border-primary transition-colors">
                         <label className="cursor-pointer flex items-center gap-4">
@@ -1117,12 +987,9 @@ export default function NewPropertyListing() {
                   >
                     <div>
                       <h2 className="text-2xl font-bold text-foreground mb-2 font-montserrat">Add Units/Rooms</h2>
-                      <p className="text-muted-foreground font-nunito">
-                        Add individual units or rooms available in this property
-                      </p>
+                      <p className="text-muted-foreground font-nunito">Add individual units or rooms available in this property</p>
                     </div>
 
-                    {/* Added Units List */}
                     {formData.units.length > 0 && (
                       <div className="space-y-3">
                         <h3 className="text-lg font-semibold text-foreground font-montserrat">
@@ -1132,17 +999,12 @@ export default function NewPropertyListing() {
                           <div key={unit.id} className="border border-border rounded-lg p-4 flex items-center gap-4">
                             <div className="flex-1">
                               <div className="flex items-center gap-2 mb-1">
-                                <h4 className="font-semibold text-foreground font-montserrat">
-                                  Unit {unit.unitNumber}
-                                </h4>
+                                <h4 className="font-semibold text-foreground font-montserrat">Unit {unit.unitNumber}</h4>
                                 <Badge variant="outline">{unit.type}</Badge>
-                                <Badge variant={unit.status === "vacant" ? "default" : "secondary"}>
-                                  {unit.status}
-                                </Badge>
+                                <Badge variant={unit.status === "vacant" ? "default" : "secondary"}>{unit.status}</Badge>
                               </div>
                               <p className="text-sm text-muted-foreground font-nunito">
-                                {unit.bedrooms} BR • {unit.bathrooms} BA • {unit.size} sqft • KES{" "}
-                                {unit.rent.toLocaleString()}/month
+                                {unit.bedrooms} BR • {unit.bathrooms} BA • {unit.size} sqft • KES {unit.rent.toLocaleString()}/month
                               </p>
                               <p className="text-xs text-muted-foreground font-nunito mt-1">
                                 Interior photos: {unit.interiorImages.length} • Exterior photos: {unit.exteriorImages.length}
@@ -1161,15 +1023,12 @@ export default function NewPropertyListing() {
                       </div>
                     )}
 
-                    {/* Add New Unit Form */}
                     <div className="border-2 border-primary/20 rounded-lg p-6 bg-primary/5">
                       <h3 className="text-lg font-semibold text-foreground mb-4 font-montserrat">Add New Unit</h3>
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                         <div>
-                          <label className="block text-sm font-semibold text-foreground mb-2 font-montserrat">
-                            Unit Number/ID *
-                          </label>
+                          <label className="block text-sm font-semibold text-foreground mb-2 font-montserrat">Unit Number/ID *</label>
                           <input
                             type="text"
                             placeholder="e.g., A101, B2, House 5"
@@ -1180,9 +1039,7 @@ export default function NewPropertyListing() {
                         </div>
 
                         <div>
-                          <label className="block text-sm font-semibold text-foreground mb-2 font-montserrat">
-                            Category *
-                          </label>
+                          <label className="block text-sm font-semibold text-foreground mb-2 font-montserrat">Category *</label>
                           <select
                             value={currentUnit.category}
                             onChange={(e) => setCurrentUnit({ ...currentUnit, category: e.target.value })}
@@ -1195,9 +1052,7 @@ export default function NewPropertyListing() {
                         </div>
 
                         <div>
-                          <label className="block text-sm font-semibold text-foreground mb-2 font-montserrat">
-                            Unit Type *
-                          </label>
+                          <label className="block text-sm font-semibold text-foreground mb-2 font-montserrat">Unit Type *</label>
                           <select
                             value={currentUnit.type}
                             onChange={(e) => setCurrentUnit({ ...currentUnit, type: e.target.value })}
@@ -1212,104 +1067,65 @@ export default function NewPropertyListing() {
                         </div>
 
                         <div>
-                          <label className="block text-sm font-semibold text-foreground mb-2 font-montserrat">
-                            Bedrooms
-                          </label>
+                          <label className="block text-sm font-semibold text-foreground mb-2 font-montserrat">Bedrooms</label>
                           <input
                             type="number"
                             min="0"
                             value={Number.isFinite(currentUnit.bedrooms) ? currentUnit.bedrooms : 0}
-                            onChange={(e) =>
-                              setCurrentUnit({
-                                ...currentUnit,
-                                bedrooms: e.target.value === "" ? 0 : Number.parseInt(e.target.value, 10),
-                              })
-                            }
+                            onChange={(e) => setCurrentUnit({ ...currentUnit, bedrooms: e.target.value === "" ? 0 : Number.parseInt(e.target.value, 10) })}
                             className="w-full px-4 py-3 border border-input rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-ring font-nunito"
                           />
                         </div>
 
                         <div>
-                          <label className="block text-sm font-semibold text-foreground mb-2 font-montserrat">
-                            Bathrooms
-                          </label>
+                          <label className="block text-sm font-semibold text-foreground mb-2 font-montserrat">Bathrooms</label>
                           <input
                             type="number"
                             min="1"
                             value={Number.isFinite(currentUnit.bathrooms) ? currentUnit.bathrooms : 1}
-                            onChange={(e) =>
-                              setCurrentUnit({
-                                ...currentUnit,
-                                bathrooms: e.target.value === "" ? 1 : Number.parseInt(e.target.value, 10),
-                              })
-                            }
+                            onChange={(e) => setCurrentUnit({ ...currentUnit, bathrooms: e.target.value === "" ? 1 : Number.parseInt(e.target.value, 10) })}
                             className="w-full px-4 py-3 border border-input rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-ring font-nunito"
                           />
                         </div>
 
                         <div>
-                          <label className="block text-sm font-semibold text-foreground mb-2 font-montserrat">
-                            Size (sqft)
-                          </label>
+                          <label className="block text-sm font-semibold text-foreground mb-2 font-montserrat">Size (sqft)</label>
                           <input
                             type="number"
                             min="0"
                             value={Number.isFinite(currentUnit.size) ? currentUnit.size : 0}
-                            onChange={(e) =>
-                              setCurrentUnit({
-                                ...currentUnit,
-                                size: e.target.value === "" ? 0 : Number.parseInt(e.target.value, 10),
-                              })
-                            }
+                            onChange={(e) => setCurrentUnit({ ...currentUnit, size: e.target.value === "" ? 0 : Number.parseInt(e.target.value, 10) })}
                             className="w-full px-4 py-3 border border-input rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-ring font-nunito"
                           />
                         </div>
 
                         <div>
-                          <label className="block text-sm font-semibold text-foreground mb-2 font-montserrat">
-                            Monthly Rent (KES) *
-                          </label>
+                          <label className="block text-sm font-semibold text-foreground mb-2 font-montserrat">Monthly Rent (KES) *</label>
                           <input
                             type="number"
                             min="0"
                             value={Number.isFinite(currentUnit.rent) ? currentUnit.rent : 0}
-                            onChange={(e) =>
-                              setCurrentUnit({
-                                ...currentUnit,
-                                rent: e.target.value === "" ? 0 : Number.parseInt(e.target.value, 10),
-                              })
-                            }
+                            onChange={(e) => setCurrentUnit({ ...currentUnit, rent: e.target.value === "" ? 0 : Number.parseInt(e.target.value, 10) })}
                             className="w-full px-4 py-3 border border-input rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-ring font-nunito"
                           />
                         </div>
 
                         <div>
-                          <label className="block text-sm font-semibold text-foreground mb-2 font-montserrat">
-                            Deposit (KES) *
-                          </label>
+                          <label className="block text-sm font-semibold text-foreground mb-2 font-montserrat">Deposit (KES) *</label>
                           <input
                             type="number"
                             min="0"
                             value={Number.isFinite(currentUnit.deposit) ? currentUnit.deposit : 0}
-                            onChange={(e) =>
-                              setCurrentUnit({
-                                ...currentUnit,
-                                deposit: e.target.value === "" ? 0 : Number.parseInt(e.target.value, 10),
-                              })
-                            }
+                            onChange={(e) => setCurrentUnit({ ...currentUnit, deposit: e.target.value === "" ? 0 : Number.parseInt(e.target.value, 10) })}
                             className="w-full px-4 py-3 border border-input rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-ring font-nunito"
                           />
                         </div>
 
                         <div>
-                          <label className="block text-sm font-semibold text-foreground mb-2 font-montserrat">
-                            Status *
-                          </label>
+                          <label className="block text-sm font-semibold text-foreground mb-2 font-montserrat">Status *</label>
                           <select
                             value={currentUnit.status}
-                            onChange={(e) =>
-                              setCurrentUnit({ ...currentUnit, status: e.target.value as "vacant" | "occupied" })
-                            }
+                            onChange={(e) => setCurrentUnit({ ...currentUnit, status: e.target.value as "vacant" | "occupied" })}
                             className="w-full px-4 py-3 border border-input rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-ring font-nunito"
                           >
                             <option value="vacant">Vacant</option>
@@ -1320,9 +1136,7 @@ export default function NewPropertyListing() {
 
                       {/* Unit Images */}
                       <div className="mb-4">
-                        <label className="block text-sm font-semibold text-foreground mb-2 font-montserrat">
-                          Unit Images
-                        </label>
+                        <label className="block text-sm font-semibold text-foreground mb-2 font-montserrat">Unit Images</label>
                         <div className="mb-3 max-w-xs">
                           <select
                             value={unitUploadType}
@@ -1338,9 +1152,7 @@ export default function NewPropertyListing() {
                             <Upload className="h-8 w-8 text-muted-foreground" />
                             <div>
                               <p className="text-sm font-medium text-foreground font-nunito">Upload unit images</p>
-                              <p className="text-xs text-muted-foreground font-nunito">
-                                Selected type: {unitUploadType}
-                              </p>
+                              <p className="text-xs text-muted-foreground font-nunito">Selected type: {unitUploadType}</p>
                             </div>
                             <input
                               type="file"
@@ -1362,11 +1174,7 @@ export default function NewPropertyListing() {
                                 <div className="grid grid-cols-3 md:grid-cols-5 gap-2">
                                   {currentUnit.interiorImages.map((file, index) => (
                                     <div key={`interior-${index}`} className="relative group">
-                                      <img
-                                        src={URL.createObjectURL(file) || "/placeholder.svg"}
-                                        alt={`Interior ${index + 1}`}
-                                        className="w-full h-20 object-cover rounded-lg"
-                                      />
+                                      <img src={URL.createObjectURL(file)} alt={`Interior ${index + 1}`} className="w-full h-20 object-cover rounded-lg" />
                                       <button
                                         onClick={() => removeUnitImage("interior", index)}
                                         className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
@@ -1386,11 +1194,7 @@ export default function NewPropertyListing() {
                                 <div className="grid grid-cols-3 md:grid-cols-5 gap-2">
                                   {currentUnit.exteriorImages.map((file, index) => (
                                     <div key={`exterior-${index}`} className="relative group">
-                                      <img
-                                        src={URL.createObjectURL(file) || "/placeholder.svg"}
-                                        alt={`Exterior ${index + 1}`}
-                                        className="w-full h-20 object-cover rounded-lg"
-                                      />
+                                      <img src={URL.createObjectURL(file)} alt={`Exterior ${index + 1}`} className="w-full h-20 object-cover rounded-lg" />
                                       <button
                                         onClick={() => removeUnitImage("exterior", index)}
                                         className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
@@ -1439,11 +1243,20 @@ export default function NewPropertyListing() {
                 ) : (
                   <Button
                     onClick={handleSubmit}
-                    disabled={formData.units.length === 0}
+                    disabled={formData.units.length === 0 || isSubmitting}
                     className="tyrent-gradient text-white font-nunito"
                   >
-                    {isSubmitting ? "Publishing..." : editId ? "Save Changes" : "Publish Listing"}
-                    <CheckCircle2 className="h-4 w-4 ml-2" />
+                    {isSubmitting ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Publishing...
+                      </>
+                    ) : (
+                      <>
+                        {editId ? "Save Changes" : "Publish Listing"}
+                        <CheckCircle2 className="h-4 w-4 ml-2" />
+                      </>
+                    )}
                   </Button>
                 )}
               </div>

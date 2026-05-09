@@ -443,7 +443,7 @@ export default function LandlordDashboard() {
           )}
 
           {/* Stats Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
               <Card className="tyrent-card-hover">
                 <CardContent className="p-6">
@@ -482,7 +482,7 @@ export default function LandlordDashboard() {
               </Card>
             </motion.div>
 
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
+            {/*<motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
               <Card className="tyrent-card-hover">
                 <CardContent className="p-6">
                   <div className="flex items-center justify-between mb-4">
@@ -501,7 +501,7 @@ export default function LandlordDashboard() {
                   <p className="text-xs text-muted-foreground mt-2 font-nunito">KES this month</p>
                 </CardContent>
               </Card>
-            </motion.div>
+            </motion.div>*/}
 
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}>
               <Card className="tyrent-card-hover">

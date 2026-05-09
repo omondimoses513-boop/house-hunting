@@ -8,7 +8,16 @@ export const metadata: Metadata = {
   title: "Tyrent - Find Your Perfect Home in Nairobi",
   description:
     "Discover verified rental properties in Nairobi. Transparent pricing, real-time availability, and trusted landlords.",
-  generator: "v0.app",
+  icons: {
+    icon: "/tyrent_logo.png",
+    apple: "/tyrent_logo.png",
+  },
+  openGraph: {
+    title: "Tyrent - Find Your Perfect Home in Nairobi",
+    description:
+      "Discover verified rental properties in Nairobi. Transparent pricing, real-time availability, and trusted landlords.",
+    images: ["/tyrent_logo.png"],
+  },
 }
 
 export default function RootLayout({

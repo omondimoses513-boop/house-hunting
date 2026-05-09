@@ -26,6 +26,8 @@ const SIDEBAR_ROUTES = [
   '/landlord/settings',
   '/landlord/subscription',
   '/booking/pending',
+  '/admin/dashboard',
+  '/profile',
 ]
 
 export function LayoutWrapper({ children }: LayoutWrapperProps) {
