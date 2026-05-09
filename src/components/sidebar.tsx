@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import Image from "next/image"
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -231,7 +232,17 @@ export function Sidebar({ onLogout }: SidebarProps) {
     <>
       {/* Header */}
       <div className="p-6 border-b border-border">
-        <h1 className="text-2xl font-bold text-primary font-montserrat">Tyrent</h1>
+        {/* Logo */}
+        <Link href="/" className="flex items-center space-x-2 z-50">
+            <Image
+              src="/tyrent_logo.png"
+              alt="Tyrent"
+              width={120}
+              height={40}
+              className="object-contain"
+              priority
+            />
+          </Link>
         <p className="text-xs text-muted-foreground mt-1 font-nunito">
           {getRoleLabel(sessionRole)}
         </p>
