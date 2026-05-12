@@ -97,7 +97,7 @@ export default function LoginPage() {
       const sessionEmail = data.user?.email || email.trim()
       const sessionName = data.user?.full_name || data.username || sessionEmail.split("@")[0] || "User"
 
-      saveSession({
+      const sessionData = {
         token: data.token || "",
         createdAt: new Date().toISOString(),
         user: {
@@ -107,10 +107,15 @@ export default function LoginPage() {
           role: mapRoleForSession(role),
           createdAt: String(data.user?.created_at ?? new Date().toISOString()),
         },
-      })
+      }
+      
+      saveSession(sessionData)
+      setSuccess("Login successful! Redirecting...")
 
-      // Redirect based on role
-      router.push(next || redirectForRole(role))
+      // Use a slight delay to ensure localStorage is persisted before navigation
+      setTimeout(() => {
+        router.push(next || redirectForRole(role))
+      }, 100)
     } catch (err) {
       if (err instanceof ApiError) {
         const lower = err.message.toLowerCase()

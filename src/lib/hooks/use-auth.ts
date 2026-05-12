@@ -11,7 +11,6 @@ export function useAuth() {
   useEffect(() => {
     // Check auth immediately on mount
     const checkAuth = () => {
-      setIsChecking(true)
       try {
         const currentSession = getSession()
         setSession(currentSession)
@@ -20,8 +19,10 @@ export function useAuth() {
       }
     }
 
-    // Initial check
-    checkAuth()
+    // Initial check - ensure DOM is ready
+    if (typeof window !== "undefined") {
+      checkAuth()
+    }
     setIsLoading(false)
 
     // Listen for storage changes (other tabs)

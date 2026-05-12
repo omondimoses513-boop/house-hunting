@@ -33,13 +33,18 @@ export function ProtectedPage({
     if (isLoading || isChecking) return
 
     if (!session) {
-      router.replace("/auth/login")
-      return
+      // Small delay to ensure localStorage is properly read before redirect
+      const timer = setTimeout(() => {
+        router.replace("/auth/login")
+      }, 50)
+      return () => clearTimeout(timer)
     }
 
     if (!isAuthorized) {
-      router.replace(dashboardRouteForRole(session.user.role))
-      return
+      const timer = setTimeout(() => {
+        router.replace(dashboardRouteForRole(session.user.role))
+      }, 50)
+      return () => clearTimeout(timer)
     }
   }, [session, isAuthorized, isLoading, isChecking, router])
 
