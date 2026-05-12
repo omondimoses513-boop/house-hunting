@@ -29,23 +29,27 @@ export function ProtectedPage({
 
   // Handle redirects
   useEffect(() => {
-    // Still loading - don't redirect yet
+    // Still loading or checking - don't redirect yet
     if (isLoading || isChecking) return
 
     if (!session) {
-      // Small delay to ensure localStorage is properly read before redirect
+      // Delay to ensure localStorage is properly read before redirect
       const timer = setTimeout(() => {
+        console.log("[v0] ProtectedPage: No session, redirecting to login")
         router.replace("/auth/login")
-      }, 50)
+      }, 100)
       return () => clearTimeout(timer)
     }
 
     if (!isAuthorized) {
       const timer = setTimeout(() => {
+        console.log("[v0] ProtectedPage: Unauthorized, redirecting to dashboard")
         router.replace(dashboardRouteForRole(session.user.role))
-      }, 50)
+      }, 100)
       return () => clearTimeout(timer)
     }
+    
+    console.log("[v0] ProtectedPage: Access granted for role:", session.user.role)
   }, [session, isAuthorized, isLoading, isChecking, router])
 
   // Show fallback or loading state while checking

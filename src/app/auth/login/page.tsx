@@ -112,10 +112,12 @@ export default function LoginPage() {
       saveSession(sessionData)
       setSuccess("Login successful! Redirecting...")
 
-      // Use a slight delay to ensure localStorage is persisted before navigation
+      // Use a delay to ensure localStorage is persisted before navigation
+      // This is critical for production where localStorage sync is slower
       setTimeout(() => {
+        console.log("[v0] Redirect timeout executed")
         router.push(next || redirectForRole(role))
-      }, 100)
+      }, 300)
     } catch (err) {
       if (err instanceof ApiError) {
         const lower = err.message.toLowerCase()
