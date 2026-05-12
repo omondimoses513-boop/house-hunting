@@ -146,6 +146,9 @@ export function saveSession(session: AuthSession) {
 export function signOut() {
   if (!isBrowser()) return
   writeSessionToDOM(null)
+  // Clear cookies used by middleware for authentication
+  document.cookie = "token=; path=/; max-age=0; SameSite=Lax"
+  document.cookie = "role=; path=/; max-age=0; SameSite=Lax"
   emitAuthChanged()
 }
 

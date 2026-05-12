@@ -110,9 +110,15 @@ export default function LoginPage() {
       }
       
       saveSession(sessionData)
+      
+      // Also set cookies for middleware authentication (critical for production)
+      // Middleware checks cookies, not localStorage, to protect routes
+      document.cookie = `token=${sessionData.token}; path=/; max-age=2592000; SameSite=Lax`
+      document.cookie = `role=${sessionData.user.role}; path=/; max-age=2592000; SameSite=Lax`
+      
       setSuccess("Login successful! Redirecting...")
 
-      // Use a delay to ensure localStorage is persisted before navigation
+      // Use a delay to ensure localStorage AND cookies are persisted before navigation
       // This is critical for production where localStorage sync is slower
       // The dashboard will then have a 10ms delay in useAuth to ensure it can read the session
       setTimeout(() => {
