@@ -62,10 +62,6 @@ function readSessionFromDOM(): AuthSession | null {
     const rawSession = window.localStorage.getItem(KEYS.SESSION)
     if (rawSession) {
       const parsed = JSON.parse(rawSession) as AuthSession
-      console.log("[v0] Session loaded from localStorage:", {
-        hasToken: !!parsed.token,
-        userRole: parsed.user?.role,
-      })
       return parsed
     }
     
@@ -75,7 +71,6 @@ function readSessionFromDOM(): AuthSession | null {
     const domRole = document.documentElement.getAttribute("data-auth-user")
     
     if ((token || domToken) && domRole) {
-      console.log("[v0] Session reconstructed from DOM/legacy storage")
       // Reconstruct session from available data
       return {
         token: token || domToken || "",
@@ -89,16 +84,8 @@ function readSessionFromDOM(): AuthSession | null {
         },
       }
     }
-    
-    console.log("[v0] No session found anywhere:", {
-      sessionKey: window.localStorage.getItem(KEYS.SESSION),
-      tokenKey: window.localStorage.getItem(KEYS.TOKEN),
-      legacyToken: window.localStorage.getItem("token"),
-      domToken: document.documentElement.getAttribute("data-auth-token"),
-      domRole: document.documentElement.getAttribute("data-auth-user"),
-    })
-  } catch (err) {
-    console.error("[v0] Error reading session:", err)
+  } catch {
+    // Fall back to nothing if parse fails
   }
   
   return null
@@ -150,19 +137,9 @@ export function getSession(): AuthSession | null {
 
 export function saveSession(session: AuthSession) {
   if (!isBrowser()) return
-  console.log("[v0] Saving session:", {
-    userRole: session.user?.role,
-    hasToken: !!session.token,
-    keys: Object.keys(KEYS),
-  })
   writeSessionToDOM(session)
   // Also store token in legacy location for backward compatibility
   window.localStorage.setItem("token", session.token)
-  console.log("[v0] Session saved. Verifying storage:", {
-    sessionStored: !!window.localStorage.getItem(KEYS.SESSION),
-    tokenStored: !!window.localStorage.getItem(KEYS.TOKEN),
-    legacyTokenStored: !!window.localStorage.getItem("token"),
-  })
   emitAuthChanged()
 }
 

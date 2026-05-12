@@ -9,26 +9,16 @@ export function useAuth() {
   const [isChecking, setIsChecking] = useState(true)
 
   useEffect(() => {
-    // Check auth immediately on mount
+    // Check auth on mount with a small delay to ensure localStorage is synced
     const checkAuth = () => {
       try {
-        console.log("[v0] useAuth: Checking session on mount")
         const currentSession = getSession()
-        console.log("[v0] useAuth: Session result:", {
-          hasSession: !!currentSession,
-          role: currentSession?.user?.role,
-        })
         setSession(currentSession)
       } finally {
         setIsChecking(false)
+        setIsLoading(false)
       }
     }
-
-    // Initial check - ensure DOM is ready
-    if (typeof window !== "undefined") {
-      checkAuth()
-    }
-    setIsLoading(false)
 
     // Listen for storage changes (other tabs)
     const handleStorageChange = () => {
@@ -40,12 +30,25 @@ export function useAuth() {
       checkAuth()
     }
 
-    window.addEventListener("storage", handleStorageChange)
-    window.addEventListener(AUTH_CHANGED_EVENT, handleAuthChanged)
+    // Initial check - ensure DOM is ready and localStorage is accessible
+    if (typeof window !== "undefined") {
+      // Small delay to ensure localStorage is synced from previous navigation
+      const timer = setTimeout(() => {
+        checkAuth()
+      }, 10)
 
-    return () => {
-      window.removeEventListener("storage", handleStorageChange)
-      window.removeEventListener(AUTH_CHANGED_EVENT, handleAuthChanged)
+      window.addEventListener("storage", handleStorageChange)
+      window.addEventListener(AUTH_CHANGED_EVENT, handleAuthChanged)
+
+      return () => {
+        clearTimeout(timer)
+        window.removeEventListener("storage", handleStorageChange)
+        window.removeEventListener(AUTH_CHANGED_EVENT, handleAuthChanged)
+      }
+    } else {
+      // Server-side, just mark as done
+      setIsLoading(false)
+      setIsChecking(false)
     }
   }, [])
 

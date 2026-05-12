@@ -109,33 +109,15 @@ export default function LoginPage() {
         },
       }
       
-      console.log("[v0] About to save session:", {
-        role: sessionData.user.role,
-        hasToken: !!sessionData.token,
-      })
-      
       saveSession(sessionData)
-      
-      // Verify it was actually saved
-      const verifySession = localStorage.getItem("tyrent_auth_session_v1")
-      console.log("[v0] Session verify immediately after save:", {
-        isSaved: !!verifySession,
-        content: verifySession ? JSON.parse(verifySession) : null,
-      })
-      
       setSuccess("Login successful! Redirecting...")
 
       // Use a delay to ensure localStorage is persisted before navigation
       // This is critical for production where localStorage sync is slower
+      // The dashboard will then have a 10ms delay in useAuth to ensure it can read the session
       setTimeout(() => {
-        const redirectTarget = next || redirectForRole(role)
-        console.log("[v0] Redirect timeout executed, redirecting to:", redirectTarget)
-        console.log("[v0] localStorage at redirect time:", {
-          session: !!localStorage.getItem("tyrent_auth_session_v1"),
-          token: !!localStorage.getItem("token"),
-        })
-        router.push(redirectTarget)
-      }, 300)
+        router.push(next || redirectForRole(role))
+      }, 500)
     } catch (err) {
       if (err instanceof ApiError) {
         const lower = err.message.toLowerCase()
