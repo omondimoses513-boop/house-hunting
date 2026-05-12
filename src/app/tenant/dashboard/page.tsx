@@ -32,7 +32,7 @@ import {
   type TenantMaintenanceRequest,
   type TenantPayment,
 } from "@/lib/tenant-storage"
-import { requireAuth } from "@/lib/route-guards"
+import { ProtectedPage } from "@/components/protected-page"
 import { backendTenantDashboard, type BackendTenantDashboard } from "@/lib/api/dashboard"
 import { backendTenantBookings } from "@/lib/api/bookings"
 import { backendListApartments, type BackendApartment } from "@/lib/api/properties"
@@ -58,7 +58,7 @@ function downloadText(filename: string, content: string) {
   URL.revokeObjectURL(url)
 }
 
-export default function TenantDashboard() {
+function TenantDashboardContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [selectedTab, setSelectedTab] = useState("overview")
@@ -76,11 +76,6 @@ export default function TenantDashboard() {
   const [backendTenant, setBackendTenant] = useState<BackendTenantDashboard | null>(null)
 
   useEffect(() => {
-    const auth = requireAuth({ role: "tenant" })
-    if (!auth.ok) {
-      router.replace(auth.redirectTo)
-      return
-    }
     const loadTenantData = async () => {
       try {
         const [data, bookings, apartments] = await Promise.all([
@@ -875,5 +870,13 @@ export default function TenantDashboard() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function TenantDashboard() {
+  return (
+    <ProtectedPage requiredRole="tenant">
+      <TenantDashboardContent />
+    </ProtectedPage>
   )
 }

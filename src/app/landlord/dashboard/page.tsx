@@ -33,7 +33,7 @@ import {
   type LandlordProperty,
   updateBookingStatus,
 } from "@/lib/landlord-storage"
-import { requireAuth } from "@/lib/route-guards"
+import { ProtectedPage } from "@/components/protected-page"
 import { backendLandlordDashboard, type BackendLandlordDashboard } from "@/lib/api/dashboard"
 import { backendGetMyProfile } from "@/lib/api/users"
 import { backendGetUserById } from "@/lib/api/users"
@@ -41,7 +41,7 @@ import { ApiError } from "@/lib/api/client"
 import { backendListApartments, type BackendApartment } from "@/lib/api/properties"
 import { backendApproveBooking, backendCancelBooking, backendLandlordBookings, backendConfirmBooking } from "@/lib/api/bookings"
 
-export default function LandlordDashboard() {
+function LandlordDashboardContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
 
@@ -59,11 +59,6 @@ export default function LandlordDashboard() {
   const [bookingActionLoading, setBookingActionLoading] = useState<string | null>(null)
 
   useEffect(() => {
-    const auth = requireAuth({ role: "landlord" })
-    if (!auth.ok) {
-      router.replace(auth.redirectTo)
-      return
-    }
 
     const loadBackendDashboard = async () => {
       try {
@@ -852,5 +847,13 @@ export default function LandlordDashboard() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function LandlordDashboard() {
+  return (
+    <ProtectedPage requiredRole="landlord">
+      <LandlordDashboardContent />
+    </ProtectedPage>
   )
 }

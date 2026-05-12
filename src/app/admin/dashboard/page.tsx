@@ -32,7 +32,7 @@ import {
   type AdminUser,
   type AdminVerification,
 } from "@/lib/admin-storage"
-import { requireAuth } from "@/lib/route-guards"
+import { ProtectedPage } from "@/components/protected-page"
 import {
   adminDashboardAnalytics,
   adminListPendingUsers,
@@ -113,7 +113,7 @@ function mergeVerificationMeta(
   return out
 }
 
-export default function AdminDashboard() {
+function AdminDashboardContent() {
   const router = useRouter()
   const [selectedPeriod, setSelectedPeriod] = useState("month")
   const [banner, setBanner] = useState<{ title: string; message: string } | null>(null)
@@ -143,11 +143,6 @@ export default function AdminDashboard() {
   const [resolutionText, setResolutionText] = useState("")
 
   useEffect(() => {
-    const auth = requireAuth({ role: "admin" })
-    if (!auth.ok) {
-      router.replace(auth.redirectTo)
-      return
-    }
     seedAdminDemoDataIfEmpty()
 
     const load = async () => {
@@ -1207,5 +1202,13 @@ export default function AdminDashboard() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function AdminDashboard() {
+  return (
+    <ProtectedPage requiredRole="admin">
+      <AdminDashboardContent />
+    </ProtectedPage>
   )
 }

@@ -51,13 +51,24 @@ async function readResponseBody(res: Response) {
 function getAuthToken() {
   if (typeof window === "undefined") return null
   try {
+    // Try multiple sources for token, in order of preference
+    // 1. Legacy token key
     const direct = localStorage.getItem("token")
     if (direct && direct.trim()) return direct.trim()
+    
+    // 2. Session key
     const rawSession = localStorage.getItem("tyrent_auth_session_v1")
-    if (!rawSession) return null
-    const parsed = JSON.parse(rawSession) as { token?: unknown }
-    const sessionToken = typeof parsed?.token === "string" ? parsed.token.trim() : ""
-    return sessionToken || null
+    if (rawSession) {
+      const parsed = JSON.parse(rawSession) as { token?: unknown }
+      const sessionToken = typeof parsed?.token === "string" ? parsed.token.trim() : ""
+      if (sessionToken) return sessionToken
+    }
+    
+    // 3. Dedicated token key
+    const dedicatedToken = localStorage.getItem("tyrent_auth_token_v1")
+    if (dedicatedToken && dedicatedToken.trim()) return dedicatedToken.trim()
+    
+    return null
   } catch {
     return null
   }

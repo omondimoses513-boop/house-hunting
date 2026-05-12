@@ -19,6 +19,7 @@ type StoredUser = AuthUser & { passwordHash: string }
 const KEYS = {
   USERS: "tyrent_auth_users_v1",
   SESSION: "tyrent_auth_session_v1",
+  TOKEN: "tyrent_auth_token_v1",
 } as const
 const AUTH_CHANGED_EVENT = "tyrent-auth-changed"
 
@@ -30,6 +31,44 @@ const ADMIN_INVITE_CODE =
 
 function isBrowser() {
   return typeof window !== "undefined" && typeof window.localStorage !== "undefined"
+}
+
+// Write session to both localStorage and a data attribute for better persistence
+function writeSessionToDOM(session: AuthSession | null) {
+  if (!isBrowser()) return
+  if (session) {
+    // Store in localStorage
+    window.localStorage.setItem(KEYS.SESSION, JSON.stringify(session))
+    // Also store token separately for API requests
+    window.localStorage.setItem(KEYS.TOKEN, session.token)
+    // Write to HTML element for SSR/hydration purposes
+    document.documentElement.setAttribute("data-auth-token", session.token)
+    document.documentElement.setAttribute("data-auth-user", session.user.role)
+  } else {
+    window.localStorage.removeItem(KEYS.SESSION)
+    window.localStorage.removeItem(KEYS.TOKEN)
+    window.localStorage.removeItem("token") // Clean up legacy token key
+    document.documentElement.removeAttribute("data-auth-token")
+    document.documentElement.removeAttribute("data-auth-user")
+  }
+}
+
+// Read session from localStorage with fallback to DOM attributes
+function readSessionFromDOM(): AuthSession | null {
+  if (!isBrowser()) return null
+  
+  try {
+    // Try to read from localStorage first
+    const rawSession = window.localStorage.getItem(KEYS.SESSION)
+    if (rawSession) {
+      const parsed = JSON.parse(rawSession) as AuthSession
+      return parsed
+    }
+  } catch {
+    // Fall back to nothing if parse fails
+  }
+  
+  return null
 }
 
 function emitAuthChanged() {
@@ -72,18 +111,21 @@ function saveStoredUsers(users: StoredUser[]) {
 
 export function getSession(): AuthSession | null {
   if (!isBrowser()) return null
-  return safeParseJson<AuthSession>(window.localStorage.getItem(KEYS.SESSION))
+  const session = readSessionFromDOM()
+  return session
 }
 
 export function saveSession(session: AuthSession) {
   if (!isBrowser()) return
-  window.localStorage.setItem(KEYS.SESSION, JSON.stringify(session))
+  writeSessionToDOM(session)
+  // Also store token in legacy location for backward compatibility
+  window.localStorage.setItem("token", session.token)
   emitAuthChanged()
 }
 
 export function signOut() {
   if (!isBrowser()) return
-  window.localStorage.removeItem(KEYS.SESSION)
+  writeSessionToDOM(null)
   emitAuthChanged()
 }
 
