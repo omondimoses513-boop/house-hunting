@@ -24,13 +24,19 @@ export function ProtectedPage({
   const isAuthorized = useMemo(() => {
     if (!session) return false
     if (!requiredRole) return true
+    console.log("[v0] ProtectedPage: Checking auth - session role:", session.user.role, "required:", requiredRole, "match:", session.user.role === requiredRole)
     return session.user.role === requiredRole
   }, [session, requiredRole])
 
   // Handle redirects
   useEffect(() => {
     // Still loading or checking - don't redirect yet
-    if (isLoading || isChecking) return
+    if (isLoading || isChecking) {
+      console.log("[v0] ProtectedPage: Still loading/checking, delaying redirect", { isLoading, isChecking })
+      return
+    }
+
+    console.log("[v0] ProtectedPage: Done loading, checking auth", { hasSession: !!session, isAuthorized })
 
     if (!session) {
       // Delay to ensure localStorage is properly read before redirect
@@ -43,7 +49,7 @@ export function ProtectedPage({
 
     if (!isAuthorized) {
       const timer = setTimeout(() => {
-        console.log("[v0] ProtectedPage: Unauthorized, redirecting to dashboard")
+        console.log("[v0] ProtectedPage: Unauthorized role, redirecting to dashboard")
         router.replace(dashboardRouteForRole(session.user.role))
       }, 100)
       return () => clearTimeout(timer)

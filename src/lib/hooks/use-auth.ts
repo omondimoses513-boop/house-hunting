@@ -12,7 +12,12 @@ export function useAuth() {
     // Check auth immediately on mount
     const checkAuth = () => {
       try {
+        console.log("[v0] useAuth: Checking session on mount")
         const currentSession = getSession()
+        console.log("[v0] useAuth: Session result:", {
+          hasSession: !!currentSession,
+          role: currentSession?.user?.role,
+        })
         setSession(currentSession)
       } finally {
         setIsChecking(false)
