@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation'
 import Header from '@/components/Header'
 import Footer from '@/components/Footer'
 import { Sidebar } from '@/components/sidebar'
+import { Toaster } from '@/components/ui/sonner'
 
 interface LayoutWrapperProps {
   children: ReactNode
@@ -55,6 +56,7 @@ export function LayoutWrapper({ children }: LayoutWrapperProps) {
         <main className="flex-1 min-h-screen w-full overflow-auto lg:ml-0">
           {children}
         </main>
+        <Toaster />
       </div>
     )
   }
@@ -65,6 +67,7 @@ export function LayoutWrapper({ children }: LayoutWrapperProps) {
       <Header />
       <main>{children}</main>
       <Footer />
+      <Toaster />
     </>
   )
 }

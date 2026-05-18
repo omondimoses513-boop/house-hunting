@@ -4,6 +4,7 @@ import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useState } from "react"
 import { motion } from "framer-motion"
+import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { PageRoutes } from "@/constants/page-routes"
@@ -84,6 +85,9 @@ export default function LoginPage() {
       const needsOtp =
         lower.includes("verify") || lower.includes("otp") || lower.includes("not verified")
       if (needsOtp) {
+        toast.info("Please verify your email first", {
+          description: "A verification link has been sent to your email.",
+        })
         router.push(`/auth/verify-otp?email=${encodeURIComponent(trimmedEmail)}&from=login`)
         return
       }
@@ -116,26 +120,75 @@ export default function LoginPage() {
       document.cookie = `token=${sessionData.token}; path=/; max-age=2592000; SameSite=Lax`
       document.cookie = `role=${sessionData.user.role}; path=/; max-age=2592000; SameSite=Lax`
       
-      setSuccess("Login successful! Redirecting...")
+      toast.success("Login successful!", {
+        description: "Redirecting to your dashboard...",
+      })
 
       // Use a delay to ensure localStorage AND cookies are persisted before navigation
       // This is critical for production where localStorage sync is slower
       // The dashboard will then have a 10ms delay in useAuth to ensure it can read the session
       setTimeout(() => {
-        router.push(next || redirectForRole(role))
+        const redirectUrl = next || redirectForRole(role)
+        router.push(redirectUrl)
+        // Force refresh the page after redirect to ensure all session data is loaded
+        setTimeout(() => {
+          window.location.reload()
+        }, 500)
       }, 500)
     } catch (err) {
+      let errorMessage = "Login failed. Please try again."
+
       if (err instanceof ApiError) {
+        errorMessage = err.message
         const lower = err.message.toLowerCase()
+
+        // Check if OTP verification is needed
         const needsOtp =
           lower.includes("verify") || lower.includes("otp") || lower.includes("not verified")
         if (needsOtp) {
+          toast.info("Email verification required", {
+            description: "A verification link has been sent to your email.",
+          })
           router.push(`/auth/verify-otp?email=${encodeURIComponent(email.trim())}&from=login`)
           setLoading(false)
           return
         }
+
+        // Parse specific error messages
+        if (
+          lower.includes("invalid") ||
+          lower.includes("incorrect") ||
+          lower.includes("wrong") ||
+          lower.includes("bad credentials")
+        ) {
+          errorMessage = "Invalid email or password. Please check and try again."
+        } else if (
+          lower.includes("not found") ||
+          lower.includes("does not exist") ||
+          lower.includes("no such user")
+        ) {
+          errorMessage = "No account found with this email. Please register first."
+        } else if (
+          lower.includes("disabled") ||
+          lower.includes("suspended") ||
+          lower.includes("locked")
+        ) {
+          errorMessage = "Your account has been disabled. Please contact support."
+        } else if (
+          lower.includes("network") ||
+          lower.includes("timeout") ||
+          lower.includes("connection")
+        ) {
+          errorMessage = "Network error. Please check your internet connection and try again."
+        }
+      } else if (err instanceof Error) {
+        errorMessage = err.message
       }
-      setError(err instanceof Error ? err.message : "Login failed.")
+
+      toast.error("Login failed", {
+        description: errorMessage,
+      })
+      setError(errorMessage)
     } finally {
       setLoading(false)
     }
